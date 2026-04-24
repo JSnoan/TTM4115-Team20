@@ -7,16 +7,14 @@ class DroneClient:
     def __init__(self, broker, port):
         self.broker = broker
         self.port = port
-        self.mqtt_client = mqtt.Client()
-        self.setup_callbacks()
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
 
-    def setup_callbacks(self):
-        self.mqtt_client.on_connect = self.on_connect
-        self.mqtt_client.on_message = self.on_message
 
     def on_connect(self, client, userdata, flags, rc):
         print(f"Drone connected to MQTT Broker: {self.broker}:{self.port}")
-        self.mqtt_client.subscribe("server/commands")
+        self.client.subscribe("server/commands")
         print("Subscribed to topic: server/commands")
 
     def on_message(self, client, userdata, msg):
@@ -31,7 +29,7 @@ class DroneClient:
             "gps": [63.42, 10.39],
             "battery": 85
             }
-        self.mqtt_client.publish("drone/telemetry", json.dumps(telemetry_data))
+        self.client.publish("drone/telemetry", json.dumps(telemetry_data))
         print(f"Published telemetry: {telemetry_data}")
         
 
@@ -40,13 +38,13 @@ class DroneClient:
             "battery": 85,
             "state": "navigating"
         }
-        self.mqtt_client.publish("drone/status", json.dumps(status_data))
+        self.client.publish("drone/status", json.dumps(status_data))
         print(f"Published status: {status_data}")
         
 
     def start(self):
-        self.mqtt_client.connect(self.broker, self.port)
-        self.mqtt_client.loop_start()
+        self.client.connect(self.broker, self.port)
+        self.client.loop_start()
 
         
 

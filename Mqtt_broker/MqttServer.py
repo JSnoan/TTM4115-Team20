@@ -35,7 +35,7 @@ class MqttServer:
         gps = data.get("gps")
         print(gps)
         command = {"command": "continue"}
-        self.mqtt_client.publish("server/commands", json.dumps(command))
+        self.client.publish("server/commands", json.dumps(command))
         # Add actions to be taken based on telemetry data
 
     def handle_status(self, data):
@@ -43,11 +43,11 @@ class MqttServer:
         state = data.get("state")
         print(battery, state)
         command = {"command": "continue"}
-        self.mqtt_client.publish("server/commands", json.dumps(command))
+        self.client.publish("server/commands", json.dumps(command))
         # Add actions to be taken based on status data
         
     def send_command(self, command):
-        topic = f"drones/commands"
+        topic = "drone/commands"
         self.client.publish(topic, json.dumps(command))
         print(f"Sent command to drone: {command}")
 
