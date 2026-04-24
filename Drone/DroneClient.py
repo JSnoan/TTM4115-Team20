@@ -1,5 +1,7 @@
 import paho.mqtt.client as mqtt
 import time
+import json
+import threading
 
 class DroneClient:
     def __init__(self, broker, port):
@@ -18,20 +20,40 @@ class DroneClient:
         print("Subscribed to topic: server/commands")
 
     def on_message(self, client, userdata, msg):
-        print(f"Received command: {msg.payload.decode()}")
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+        except Exception as e:
+            print("Error with message")
         # Add handling off commands here
 
     def publish_telemetry(self):
-        while True:
-            telemetry_data = "GPS: 63.42, 10.39, Battery: 85%" #Example data
-            self.mqtt_client.publish("drone/telemetry", telemetry_data)
-            print(f"Published telemetry: {telemetry_data}")
-            time.sleep(5)
+        telemetry_data = {
+            "gps": [63.42, 10.39],
+            "battery": 85
+            }
+        self.mqtt_client.publish("drone/telemetry", json.dumps(telemetry_data))
+        print(f"Published telemetry: {telemetry_data}")
+        
+
+    def publish_status(self):
+        status_data = {
+            "battery": 85,
+            "state": "navigating"
+        }
+        self.mqtt_client.publish("drone/status", json.dumps(status_data))
+        print(f"Published status: {status_data}")
+        
 
     def start(self):
         self.mqtt_client.connect(self.broker, self.port)
         self.mqtt_client.loop_start()
-        self.publish_telemetry()
+
+        
+
+        while True:
+            threading.Thread(target=self.publish_telemetry, daemon=True).start()
+            threading.Thread(target=self.publish_status, daemon=True).start()
+            time.sleep(100)
 
 broker, port = "mqtt20.item.ntnu.no", 1883
 

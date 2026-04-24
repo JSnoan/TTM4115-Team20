@@ -1,4 +1,5 @@
 import paho.mqtt.client as mqtt
+import json
 
 class MqttServer:
     def __init__(self, broker, port):
@@ -19,19 +20,30 @@ class MqttServer:
         print("Subscribed to topics: drone/telemetry, drone/status")
 
     def on_message(self, client, userdata, msg):
-        print(f"Received message on topic {msg.topic}: {msg.payload.decode()}")
-        # Actions related to telemetry/status
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+        except Exception as e:
+            print("Error parsing JSON:", e)
+            return
+
         if msg.topic == "drone/telemetry":
-            self.handle_telemetry(msg.payload.decode())
+            self.handle_telemetry(payload)
         elif msg.topic == "drone/status":
-            self.handle_status(msg.payload.decode())
+            self.handle_status(payload)
 
     def handle_telemetry(self, data):
-        print(f"Telemetry Data: {data}")
+        gps = data.get("gps")
+        print(gps)
+        command = {"command": "continue"}
+        self.mqtt_client.publish("server/commands", json.dumps(command))
         # Add actions to be taken based on telemetry data
 
     def handle_status(self, data):
-        print(f"Drone Status: {data}")
+        battery = data.get("battery")
+        state = data.get("state")
+        print(battery, state)
+        command = {"command": "continue"}
+        self.mqtt_client.publish("server/commands", json.dumps(command))
         # Add actions to be taken based on status data
 
     def start(self):
@@ -39,7 +51,7 @@ class MqttServer:
         self.mqtt_client.connect(self.broker, self.port)
         self.mqtt_client.loop_forever()
 
-# Define broker and port
+# Define broker and port    
 broker, port = "mqtt20.item.ntnu.no", 1883
 
 # Start the MQTT server
