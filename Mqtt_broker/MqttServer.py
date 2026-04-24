@@ -13,9 +13,8 @@ class MqttServer:
         if rc == 0:
             print(f"Connected to MQTT Broker: {self.broker}:{self.port}")
             #Subscribe to drone information
-            self.client.subscribe("drone/telemetry")
             self.client.subscribe("drone/status")
-            print("Subscribed to topics: drone/telemetry, drone/status")
+            print("Subscribed to topics: drone/status")
         else:
             print(f"connection failed with code {rc}")
 
@@ -26,22 +25,13 @@ class MqttServer:
             print("Error parsing JSON:", e)
             return
 
-        if msg.topic == "drone/telemetry":
-            self.handle_telemetry(payload)
-        elif msg.topic == "drone/status":
+        if msg.topic == "drone/status":
             self.handle_status(payload)
 
-    def handle_telemetry(self, data):
-        gps = data.get("gps")
-        print(gps)
-        command = {"command": "continue"}
-        self.client.publish("server/commands", json.dumps(command))
-        # Add actions to be taken based on telemetry data
-
     def handle_status(self, data):
-        battery = data.get("battery")
         state = data.get("state")
-        print(battery, state)
+        battery = data.get("battery")
+        pos = data.get("pos")
         command = {"command": "continue"}
         self.client.publish("server/commands", json.dumps(command))
         # Add actions to be taken based on status data
@@ -55,8 +45,10 @@ class MqttServer:
         print(f"Starting MQTT Server on {self.broker}:{self.port}")
         self.client.connect(self.broker, self.port)
         self.client.loop_start()
+        #TODO add message of where client is located(randint of certain area)
         
         try:
+            #TODO make handling based on data, not manual user input
             while True:
                 user_input = input("server> ")
 
