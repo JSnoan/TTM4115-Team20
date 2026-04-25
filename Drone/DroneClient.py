@@ -27,7 +27,7 @@ class DroneClient:
             return
         
         command = payload.get("command")
-        current_state = self.logic.stm.current_state.name
+        current_state = self.logic.current_state
         
         allowed_commands = {
             "docked": ["dispatch"],
@@ -42,6 +42,7 @@ class DroneClient:
             return
 
         self.stm_driver.send(command, "droneMachine")
+        print(f'sent command {command} to the state machine')
 
     def start(self):
         self.client.connect(self.broker, self.port)

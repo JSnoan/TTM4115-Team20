@@ -85,7 +85,7 @@ class MqttServer:
                     break
 
                 else:
-                    print("Commands: dispatch, manual, complete, return, quit")
+                    print("Commands: dispatch, abort, complete, return, quit")
 
         except KeyboardInterrupt:
             pass
