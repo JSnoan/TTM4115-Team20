@@ -7,6 +7,7 @@ class DroneLogic:
         self.client = client
         self.pos = [63.42, 10.39]
         self.battery = 85
+        self.current_state = "initial"
 
         # Transitions
 
@@ -105,22 +106,27 @@ class DroneLogic:
     # ----------------
 
     def docked_state(self):
+        self.current_state = "docked"
         print("Entered docked state")
         self.publish_status()
 
     def navigating_state(self):
+        self.current_state = "navigating"
         print("Entered navigating state")
         self.publish_status()
 
     def manual_state(self):
+        self.current_state = "manual_control"
         print("Entered manual control state")
         self.publish_status()
 
     def waiting_state(self):
+        self.current_state = "waiting_onsite"
         print("Entered waiting onsite state")
         self.publish_status()
 
     def returning_state(self):
+        self.current_state = "returning"
         print("Entered returning state")
         self.publish_status()
 
@@ -130,7 +136,7 @@ class DroneLogic:
 
     def publish_status(self):
         status_data = {
-            "state": self.stm.current_state.name,
+            "state": self.current_state,
             "pos": self.pos,
             "battery": self.battery
         }
