@@ -1,107 +1,134 @@
 import stmpy
 import json
-import paho.mqtt.client as mqtt
-import time
-import threading
 
-broker, port = "mqtt20.item.ntnu.no", 1883
 
 class DroneLogic:
-    """
-    State Machine for a drone.
-    
-    """
     def __init__(self, client):
-
-        #Transitions
+        self.client = client
+        self.pos = [63.42, 10.39]
+        self.battery = 85
 
         initial = {
-            'source': 'initial', 
-            'target': 'docked'
+            "source": "initial",
+            "target": "docked"
         }
 
         dispatch = {
-            'source': 'docked', 
-            'target': 'navigating', 
-            'trigger': 'dispatch',
-            'effect': ''
+            "source": "docked",
+            "target": "navigating",
+            "trigger": "dispatch"
         }
 
         prox_alert = {
-            'source': 'navigating',
-            'target': 'manual_control', 
-            'trigger':'prox_alert',
-            'effect': ''
+            "source": "navigating",
+            "target": "manual_control",
+            "trigger": "prox_alert"
         }
 
         manual_complete = {
-            'source': 'manual_control', 
-            'target': 'waiting_onsite', 
-            'trigger': 'manual_control',
-            'effect': ''
+            "source": "manual_control",
+            "target": "waiting_onsite",
+            "trigger": "manual_complete"
         }
 
         nav_abort = {
-            'source': 'navigating',
-            'target': 'returning', 
-            'trigger': 'nav_abort',
-            'effect': ''
+            "source": "navigating",
+            "target": "returning",
+            "trigger": "nav_abort"
         }
 
         manual_abort = {
-            'source': 'manual_control',
-            'target': 'returning',
-            'trigger': 'manual_abort',
-            'effect': ''
+            "source": "manual_control",
+            "target": "returning",
+            "trigger": "manual_abort"
         }
 
         mission_complete = {
-            'source': 'waiting_onsite',
-            'target': 'returning', 
-            'trigger': 'mission_complete',
-            'effect': ''
+            "source": "waiting_onsite",
+            "target": "returning",
+            "trigger": "mission_complete"
         }
 
-
-        # States
         docked = {
-            'name': 'docked',
-            'entry': ''
+            "name": "docked",
+            "entry": "docked_state"
         }
 
         navigating = {
-            'name': 'navigating',
-            'entry': '',
+            "name": "navigating",
+            "entry": "navigating_state"
         }
 
         manual_control = {
-            'name': 'manual_control',
-            'entry': ''
+            "name": "manual_control",
+            "entry": "manual_state"
         }
 
         waiting_onsite = {
-            'name': 'waiting_onsite',
-            'entry': ''
+            "name": "waiting_onsite",
+            "entry": "waiting_state"
         }
-        
+
         returning = {
-            'name': 'returning',
-            'entry': '',
+            "name": "returning",
+            "entry": "returning_state"
         }
-        
-        self.stm = stmpy.Machine(name="droneMachine", transitions=[], states=[docked, navigating, manual_control, waiting_onsite, returning], obj=self)
-        
-        # state methods
-        
-        def publish_status(self):
-            status_data = {
-                "state": "navigating",
-                "pos": [63.42, 10.39],
-                "battery": 85
-            }
-            self.client.publish("drone/status", json.dumps(status_data))
-            print(f"Published status: {status_data}")
-        
-        
-        # transition methods
-        
+
+        self.stm = stmpy.Machine(
+            name="droneMachine",
+            transitions=[
+                initial,
+                dispatch,
+                prox_alert,
+                manual_complete,
+                nav_abort,
+                manual_abort,
+                mission_complete
+            ],
+            states=[
+                docked,
+                navigating,
+                manual_control,
+                waiting_onsite,
+                returning
+            ],
+            obj=self
+        )
+
+    # ----------------
+    # State methods
+    # ----------------
+
+    def docked_state(self):
+        print("Entered docked state")
+        self.publish_status()
+
+    def navigating_state(self):
+        print("Entered navigating state")
+        self.publish_status()
+
+    def manual_state(self):
+        print("Entered manual control state")
+        self.publish_status()
+
+    def waiting_state(self):
+        print("Entered waiting onsite state")
+        self.publish_status()
+
+    def returning_state(self):
+        print("Entered returning state")
+        self.publish_status()
+
+    # ----------------
+    # Helper methods
+    # ----------------
+
+    def publish_status(self):
+        status_data = {
+            "state": self.stm.current_state.name,
+            "pos": self.pos,
+            "battery": self.battery
+        }
+
+        self.client.publish("drone/status", json.dumps(status_data))
+        print(f"Published status: {status_data}")
