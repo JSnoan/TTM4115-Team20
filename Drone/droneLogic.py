@@ -8,6 +8,8 @@ class DroneLogic:
         self.pos = [63.42, 10.39]
         self.battery = 85
 
+        # Transitions
+
         initial = {
             "source": "initial",
             "target": "docked"
@@ -49,6 +51,9 @@ class DroneLogic:
             "trigger": "mission_complete"
         }
 
+
+        # States
+        
         docked = {
             "name": "docked",
             "entry": "docked_state"
