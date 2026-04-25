@@ -1,5 +1,6 @@
 import paho.mqtt.client as mqtt
 import json
+import time
 
 class MqttServer:
     def __init__(self, broker, port):
@@ -48,7 +49,7 @@ class MqttServer:
         #TODO add message of where client is located(randint of certain area)
         
         try:
-            #TODO make handling based on data, not manual user input
+            #TODO make handling based on data, not manual user input, for relevant cases
             while True:
                 user_input = input("server> ")
 
@@ -60,27 +61,31 @@ class MqttServer:
                             "lon": 10.395
                         }
                     })
+                    time.sleep(5)
+                    self.send_command({
+                        "command": "prox_alert"
+                    })
+                
+                elif user_input == "abort":
+                    self.send_command({
+                        "command": "manual_abort"
+                    })
+                    
+                elif user_input == "complete":
+                    self.send_command({
+                        "command": "manual_complete"
+                    })
 
                 elif user_input == "return":
                     self.send_command({
-                        "command": "return_home"
-                    })
-
-                elif user_input == "manual":
-                    self.send_command({
-                        "command": "manual_control"
-                    })
-
-                elif user_input == "land":
-                    self.send_command({
-                        "command": "land"
+                        "command": "mission_complete"
                     })
 
                 elif user_input == "quit":
                     break
 
                 else:
-                    print("Commands: dispatch, return, manual, land, quit")
+                    print("Commands: dispatch, manual, complete, return, quit")
 
         except KeyboardInterrupt:
             pass
