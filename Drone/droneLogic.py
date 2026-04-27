@@ -54,6 +54,12 @@ class DroneLogic:
             "trigger": "mission_complete"
         }
 
+        successfully_docked = {
+            "source": "returning",
+            "target": "docked",
+            "trigger": "successfully_docked"
+        }
+
 
         # States
         
@@ -91,7 +97,8 @@ class DroneLogic:
                 manual_complete,
                 nav_abort,
                 manual_abort,
-                mission_complete
+                mission_complete,
+                successfully_docked
             ],
             states=[
                 docked,

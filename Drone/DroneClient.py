@@ -9,6 +9,8 @@ from droneLogic import DroneLogic
 from sense_reader import SenseReader
 from telemetry import TelemetrySimulator
 
+MIN_DISPATCH_BATTERY = 90
+
 class DroneClient:
     def __init__(
         self,
@@ -61,11 +63,22 @@ class DroneClient:
             "navigating": ["prox_alert", "nav_abort"],
             "manual_control": ["manual_complete", "manual_abort"],
             "waiting_onsite": ["mission_complete"],
-            "returning": [],
+            "returning": ["successfully_docked"],
         }
 
         if command not in allowed_commands.get(current_state, []):
             print(f"Ignored invalid command '{command}' while in state '{current_state}'")
+            return
+
+        if command == "dispatch" and self.logic.battery < MIN_DISPATCH_BATTERY:
+            print(
+                f"Ignored dispatch: battery {self.logic.battery:.1f}% is below "
+                f"{MIN_DISPATCH_BATTERY}%"
+            )
+            self.logic.publish_status({
+                "warning": "battery_too_low_for_dispatch",
+                "min_dispatch_battery": MIN_DISPATCH_BATTERY,
+            })
             return
 
         if command == "dispatch":
@@ -111,6 +124,7 @@ class DroneClient:
             })
 
             distance_to_target = telemetry_data.get("distance_to_target_m")
+            distance_to_base = telemetry_data.get("distance_to_base_m")
             if (
                 self.auto_proximity
                 and self.logic.current_state == "navigating"
@@ -121,6 +135,14 @@ class DroneClient:
                 self.proximity_sent = True
                 self.stm_driver.send("prox_alert", "droneMachine")
                 print("Auto proximity alert sent to the state machine")
+
+            if (
+                self.logic.current_state == "returning"
+                and distance_to_base is not None
+                and distance_to_base <= 1
+            ):
+                self.stm_driver.send("successfully_docked", "droneMachine")
+                print("Auto successfully_docked sent to the state machine")
 
 
 def parse_args():

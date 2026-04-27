@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MedFly Operations</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=leaflet-fix-1">
+</head>
+<body data-state="unknown">
+  <div class="med-app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">MF</div>
+        <div>
+          <strong>Med<span>Fly</span></strong>
+          <small>Team 20</small>
+        </div>
+      </div>
+
+      <section class="patient-card">
+        <div class="avatar">LH</div>
+        <div>
+          <strong>Lars Hansen</strong>
+          <small>Patient · ID P-100234</small>
+        </div>
+      </section>
+
+      <nav class="side-nav" aria-label="MedFly sections">
+        <span>Main</span>
+        <button class="nav-item active" data-screen-target="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-screen-target="emergency">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v8h8v2h-8v8h-2v-8H3v-2h8z"/></svg>
+          Emergency Order
+        </button>
+        <button class="nav-item" data-screen-target="medicine">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h6V7zm0 4v2h6v-2zm0 4v2h4v-2z"/></svg>
+          Medicine Service
+        </button>
+        <button class="nav-item" data-screen-target="tracking">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7zm0 9.5A2.5 2.5 0 1 0 12 6a2.5 2.5 0 0 0 0 5.5z"/></svg>
+          Track Delivery
+          <em id="nav-active-badge">1</em>
+        </button>
+        <button class="nav-item" data-screen-target="diagnostics">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v3H4zm0 5h10v3H4zm0 5h16v3H4z"/></svg>
+          Diagnostics
+        </button>
+      </nav>
+
+      <section class="sidebar-status">
+        <span>MQTT Broker</span>
+        <strong>mqtt20.item.ntnu.no</strong>
+        <small id="connection">Connecting to mission server...</small>
+      </section>
+    </aside>
+
+    <main class="main">
+      <header class="mobile-header">
+        <div class="brand compact">
+          <div class="brand-icon">MF</div>
+          <strong>Med<span>Fly</span></strong>
+        </div>
+        <button class="nav-item mini active" data-screen-target="dashboard">Home</button>
+      </header>
+
+      <section class="screen active" id="screen-dashboard">
+        <div class="screen-content">
+          <div class="welcome-grid">
+            <div>
+              <p class="eyebrow">Pharmaceutical drone delivery platform</p>
+              <h1>Good morning,<br>Lars</h1>
+              <p>You have a live drone system connected through MQTT and ready for your TTM4115 demo.</p>
+            </div>
+            <article class="state-card">
+              <span>Drone State</span>
+              <strong id="state" data-state="unknown">unknown</strong>
+              <p id="mission-summary">Waiting for telemetry from DroneClient.py.</p>
+            </article>
+          </div>
+
+          <section class="active-delivery" data-screen-target="tracking">
+            <div>
+              <p><span class="pulse-dot"></span> Active mission · Team 20</p>
+              <h2 id="active-mission-title">Medical drone mission</h2>
+              <span id="active-mission-subtitle">No order dispatched yet</span>
+            </div>
+            <div class="eta-box">
+              <strong id="dashboard-progress">0%</strong>
+              <span>Route progress</span>
+            </div>
+          </section>
+
+          <section class="metrics-grid" aria-label="Live telemetry">
+            <article class="metric-card">
+              <span>Battery</span>
+              <strong id="battery">-</strong>
+              <small id="dispatch-guard">Waiting for battery</small>
+            </article>
+            <article class="metric-card">
+              <span>Position</span>
+              <strong id="position">-</strong>
+              <small>Drone telemetry topic</small>
+            </article>
+            <article class="metric-card">
+              <span>Target</span>
+              <strong id="target">-</strong>
+              <small id="map-route-state">No active route</small>
+            </article>
+            <article class="metric-card">
+              <span>Sense HAT</span>
+              <strong id="sense-hat">-</strong>
+              <small>Raspberry Pi sensor source</small>
+            </article>
+          </section>
+
+          <section class="quick-actions">
+            <button class="quick-card" data-screen-target="emergency">
+              <span>+</span>
+              <strong>Emergency Order</strong>
+              <small>UC-1 urgent medical aid</small>
+            </button>
+            <button class="quick-card" data-screen-target="medicine">
+              <span>Rx</span>
+              <strong>Medicine Service</strong>
+              <small>UC-3 registration + UC-2 delivery</small>
+            </button>
+            <button class="quick-card" data-screen-target="tracking">
+              <span>DR</span>
+              <strong>Track Drone</strong>
+              <small>State machine and telemetry</small>
+            </button>
+            <button class="quick-card" data-screen-target="diagnostics">
+              <span>MQ</span>
+              <strong>MQTT Log</strong>
+              <small>Commands and status packets</small>
+            </button>
+          </section>
+
+          <section class="overview-row">
+            <article><strong id="uc1-count">0</strong><span>UC-1 emergency</span></article>
+            <article><strong id="uc3-count">0</strong><span>UC-3 registered</span></article>
+            <article><strong id="uc2-count">0</strong><span>UC-2 deliveries</span></article>
+            <article><strong id="status-age">-</strong><span>Status age</span></article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Communication proof</p>
+                <h2>Web app to MQTT to Raspberry Pi</h2>
+              </div>
+            </div>
+            <div class="chain">
+              <div class="chain-node active"><span>1</span><strong>Web App</strong><small>User action</small></div>
+              <div class="chain-line"></div>
+              <div class="chain-node" id="chain-mqtt"><span>2</span><strong>MQTT</strong><small>drone/commands</small></div>
+              <div class="chain-line"></div>
+              <div class="chain-node" id="chain-pi"><span>3</span><strong>Raspberry Pi</strong><small>DroneClient.py</small></div>
+              <div class="chain-line"></div>
+              <div class="chain-node" id="chain-telemetry"><span>4</span><strong>Telemetry</strong><small>drone/status</small></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-emergency">
+        <div class="screen-header">
+          <button class="back-btn" data-screen-target="dashboard">←</button>
+          <div>
+            <p class="eyebrow">UC-1</p>
+            <h1>Emergency First Aid Order</h1>
+          </div>
+        </div>
+        <div class="screen-content">
+          <div class="emergency-layout">
+            <section class="panel form-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Fast intake</p>
+                  <h2>Request Details</h2>
+                </div>
+                <span class="pill danger">Priority flow</span>
+              </div>
+
+              <div class="form-grid">
+                <label>Requester
+                  <input id="emergency-requester" value="Hiker outside Trondheim">
+                </label>
+                <label>Contact
+                  <input id="emergency-contact" value="+47 400 00 113">
+                </label>
+                <label>Aid needed
+                  <select id="emergency-need">
+                    <option value="first aid kit">First aid kit</option>
+                    <option value="defibrillator">Defibrillator</option>
+                    <option value="thermal blanket">Thermal blanket</option>
+                    <option value="power bank and signal marker">Power bank and signal marker</option>
+                  </select>
+                </label>
+                <label>Priority
+                  <select id="emergency-priority">
+                    <option value="urgent">Urgent</option>
+                    <option value="high">High</option>
+                    <option value="monitor">Monitor</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="coordinate-card">
+                <div class="coordinate-head">
+                  <strong>Origin</strong>
+                  <button class="small-btn active" data-map-mode="origin">Pick on map</button>
+                </div>
+                <div class="coordinate-grid">
+                  <label>Latitude
+                    <input id="emergency-origin-lat" type="number" step="0.000001" value="63.420000">
+                  </label>
+                  <label>Longitude
+                    <input id="emergency-origin-lon" type="number" step="0.000001" value="10.390000">
+                  </label>
+                </div>
+              </div>
+
+              <div class="coordinate-card destination">
+                <div class="coordinate-head">
+                  <strong>Destination</strong>
+                  <button class="small-btn" data-map-mode="destination">Pick on map</button>
+                </div>
+                <div class="coordinate-grid">
+                  <label>Latitude
+                    <input id="emergency-lat" type="number" step="0.000001" value="63.425000">
+                  </label>
+                  <label>Longitude
+                    <input id="emergency-lon" type="number" step="0.000001" value="10.395000">
+                  </label>
+                </div>
+              </div>
+
+              <label class="wide">Operator notes
+                <input id="emergency-notes" value="Caller reports injury, phone battery low">
+              </label>
+
+              <div class="action-row">
+                <button id="create-emergency" class="btn primary">Create Emergency Request</button>
+                <select id="emergency-select"></select>
+                <button id="dispatch-emergency" class="btn danger">Dispatch Selected</button>
+              </div>
+            </section>
+
+            <section class="panel map-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Interactive Trondheim map</p>
+                  <h2>Pick origin and destination</h2>
+                </div>
+                <span class="pill" id="map-mode-label">Picking origin</span>
+              </div>
+
+              <div class="trondheim-map" id="emergency-map" role="application" aria-label="Real OpenStreetMap view of Trondheim">
+                <div class="map-loading" id="map-loading">
+                  Loading real Trondheim map...
+                </div>
+              </div>
+
+              <div class="map-summary">
+                <article><span>Origin</span><strong id="origin-readout">-</strong></article>
+                <article><span>Destination</span><strong id="destination-readout">-</strong></article>
+                <article><span>Approx route</span><strong id="emergency-distance">-</strong></article>
+              </div>
+
+              <div class="record-list emergency-records" id="emergency-list"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-medicine">
+        <div class="screen-header">
+          <button class="back-btn" data-screen-target="dashboard">←</button>
+          <div>
+            <p class="eyebrow">UC-3 + UC-2</p>
+            <h1>Medicine Service</h1>
+          </div>
+        </div>
+        <div class="screen-content">
+          <div class="step-strip">
+            <div class="done"><span>1</span><strong>Register requester</strong><small>UC-3</small></div>
+            <div><span>2</span><strong>Queue delivery</strong><small>UC-2</small></div>
+            <div><span>3</span><strong>Dispatch drone</strong><small>MQTT</small></div>
+          </div>
+
+          <div class="medicine-layout">
+            <section class="panel form-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">UC-3</p>
+                  <h2>Requester Registration</h2>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label>Requester
+                  <input id="registration-requester" value="Kari Nordmann">
+                </label>
+                <label>Contact
+                  <input id="registration-contact" value="+47 900 10 020">
+                </label>
+                <label>Helsenorge ID
+                  <input id="registration-patient-id" value="HN-1001">
+                </label>
+                <label>Delivery address
+                  <input id="registration-address" value="Remote cabin, Bymarka">
+                </label>
+                <label class="wide">Requested medicines
+                  <input id="registration-medicines" value="insulin, antibiotics">
+                </label>
+                <label>Drop-off latitude
+                  <input id="registration-lat" type="number" step="0.000001" value="63.421">
+                </label>
+                <label>Drop-off longitude
+                  <input id="registration-lon" type="number" step="0.000001" value="10.401">
+                </label>
+                <label>Container type
+                  <select id="registration-container">
+                    <option value="locked medicine box">Locked medicine box</option>
+                    <option value="marked landing pad">Marked landing pad</option>
+                    <option value="clinic handoff">Clinic handoff</option>
+                  </select>
+                </label>
+                <label>Drop-off note
+                  <input id="registration-dropoff-notes" value="Blue container by the cabin entrance">
+                </label>
+              </div>
+              <button id="register-requester" class="btn primary">Register Requester</button>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Approved patients</p>
+                  <h2>Registered Requesters</h2>
+                </div>
+              </div>
+              <div class="record-list" id="registration-list"></div>
+            </section>
+
+            <section class="panel delivery-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">UC-2</p>
+                  <h2>Routine Medicine Delivery</h2>
+                </div>
+                <span class="pill">Order Type B</span>
+              </div>
+              <div class="form-grid three">
+                <label>Registered requester
+                  <select id="delivery-registration"></select>
+                </label>
+                <label>Approved medicine
+                  <select id="delivery-medicine"></select>
+                </label>
+                <label>Priority
+                  <select id="delivery-priority">
+                    <option value="standard">Standard</option>
+                    <option value="expedited">Expedited</option>
+                    <option value="clinical priority">Clinical priority</option>
+                  </select>
+                </label>
+              </div>
+              <div class="action-row">
+                <button id="create-delivery" class="btn primary">Queue Delivery</button>
+                <select id="delivery-select"></select>
+                <button id="approve-delivery" class="btn secondary">Approve</button>
+                <button id="dispatch-delivery" class="btn primary">Dispatch</button>
+              </div>
+              <div class="record-list delivery-list" id="delivery-list"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-tracking">
+        <div class="screen-header">
+          <button class="back-btn" data-screen-target="dashboard">←</button>
+          <div>
+            <p class="eyebrow">Live delivery</p>
+            <h1>Delivery Tracking</h1>
+          </div>
+          <span class="order-chip">MQTT live</span>
+        </div>
+        <div class="screen-content">
+          <section class="journey-card">
+            <div class="journey-top">
+              <div>
+                <p class="eyebrow">Mission in progress</p>
+                <strong id="tracking-state">Unknown</strong>
+                <span id="tracking-subtitle">Waiting for drone status</span>
+              </div>
+              <div class="battery-block">
+                <span>Battery</span>
+                <strong id="tracking-battery">-</strong>
+              </div>
+            </div>
+            <div class="route-track">
+              <div class="route-track-line"><span id="journey-progress"></span></div>
+              <div class="route-node start">BASE</div>
+              <div class="route-drone" id="journey-drone">DR</div>
+              <div class="route-node end">DROP</div>
+            </div>
+            <div class="route-labels">
+              <span id="route-start-label">Base station</span>
+              <span id="route-end-label">Destination</span>
+            </div>
+          </section>
+
+          <div class="tracking-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Mission actions</p>
+                  <h2>MQTT Commands</h2>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label>Target latitude
+                  <input id="target-lat" type="number" step="0.000001" value="63.425">
+                </label>
+                <label>Target longitude
+                  <input id="target-lon" type="number" step="0.000001" value="10.395">
+                </label>
+              </div>
+              <div class="command-grid">
+                <button data-command="dispatch" class="btn primary">Dispatch Drone</button>
+                <button data-command="prox_alert" class="btn secondary">Proximity Alert</button>
+                <button data-command="manual_complete" class="btn secondary">Complete Manual Guidance</button>
+                <button data-command="mission_complete" class="btn secondary">Mission Complete</button>
+                <button data-command="successfully_docked" class="btn secondary">Confirm Docked</button>
+                <button data-command="nav_abort" class="btn danger">Abort Navigation</button>
+                <button data-command="manual_abort" class="btn danger">Abort Manual Guidance</button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">State machine</p>
+                  <h2>Drone Lifecycle</h2>
+                </div>
+              </div>
+              <ol class="timeline" id="state-flow">
+                <li data-flow-state="docked"><span>1</span><strong>Docked</strong><small>Ready and charging</small></li>
+                <li data-flow-state="navigating"><span>2</span><strong>Navigating</strong><small>Autonomous flight</small></li>
+                <li data-flow-state="manual_control"><span>3</span><strong>Manual Control</strong><small>Dispatcher guidance</small></li>
+                <li data-flow-state="waiting_onsite"><span>4</span><strong>On Site</strong><small>Delivered / waiting</small></li>
+                <li data-flow-state="returning"><span>5</span><strong>Returning</strong><small>Back to base</small></li>
+              </ol>
+            </section>
+          </div>
+
+          <section class="metrics-grid tracking-metrics">
+            <article class="metric-card"><span>Speed</span><strong id="speed">-</strong><small>Telemetry simulator</small></article>
+            <article class="metric-card"><span>Distance to target</span><strong id="distance-target">-</strong><small>Live computed packet</small></article>
+            <article class="metric-card"><span>Distance to base</span><strong id="distance-base">-</strong><small>Return condition</small></article>
+          </section>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-diagnostics">
+        <div class="screen-header">
+          <button class="back-btn" data-screen-target="dashboard">←</button>
+          <div>
+            <p class="eyebrow">MQTT diagnostics</p>
+            <h1>System Events</h1>
+          </div>
+        </div>
+        <div class="screen-content">
+          <div class="diagnostics-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Event stream</p>
+                  <h2>MQTT And Use Case Log</h2>
+                </div>
+              </div>
+              <ol class="events" id="events"></ol>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Latest packet</p>
+                  <h2>Raw Drone Status</h2>
+                </div>
+              </div>
+              <pre id="raw-status">{}</pre>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <p class="feedback" id="feedback" role="status"></p>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Mobile navigation">
+      <button class="bottom-item active" data-screen-target="dashboard">Home</button>
+      <button class="bottom-item" data-screen-target="emergency">Emergency</button>
+      <button class="bottom-item" data-screen-target="medicine">Medicine</button>
+      <button class="bottom-item" data-screen-target="tracking">Track</button>
+    </nav>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=leaflet-fix-1"></script>
+</body>
+</html>

@@ -90,11 +90,16 @@ class MqttServer:
                         "command": "mission_complete"
                     })
 
+                elif user_input == "dock":
+                    self.send_command({
+                        "command": "successfully_docked"
+                    })
+
                 elif user_input == "quit":
                     break
 
                 else:
-                    print("Commands: dispatch, abort, complete, return, quit")
+                    print("Commands: dispatch, abort, complete, return, dock, quit")
 
         except KeyboardInterrupt:
             pass
