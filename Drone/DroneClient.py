@@ -2,16 +2,20 @@ import paho.mqtt.client as mqtt
 import time
 import json
 import threading
+import stmpy
 from droneLogic import DroneLogic
 
 class DroneClient:
     def __init__(self, broker, port):
         self.broker = broker
         self.port = port
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(client_id="team20_drone")
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.logic = DroneLogic(self.client)
+        self.stm_driver = stmpy.Driver()
+        self.stm_driver.add_machine(self.logic.stm)
+        self.stm_driver.start()
 
 
     def on_connect(self, client, userdata, flags, rc):
@@ -20,6 +24,10 @@ class DroneClient:
         print("Subscribed to topic: drone/commands")
 
     def on_message(self, client, userdata, msg):
+        #debugging
+        print(f"RAW MESSAGE: topic={msg.topic}, payload={msg.payload}")
+        
+        
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
         except Exception as e:

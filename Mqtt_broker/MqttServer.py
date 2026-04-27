@@ -6,7 +6,7 @@ class MqttServer:
     def __init__(self, broker, port):
         self.broker = broker
         self.port = port
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(client_id="team20_server")
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
@@ -33,9 +33,12 @@ class MqttServer:
         state = data.get("state")
         battery = data.get("battery")
         pos = data.get("pos")
-        command = {"command": "continue"}
-        self.client.publish("server/commands", json.dumps(command))
-        # Add actions to be taken based on status data
+        
+        #removed while debugging
+        #command = {"command": "continue"}
+        #self.client.publish("drone/commands", json.dumps(command))
+        
+        #TODO Add actions to be taken based on status data
         
     def send_command(self, command):
         topic = "drone/commands"
@@ -61,6 +64,9 @@ class MqttServer:
                             "lon": 10.395
                         }
                     })
+                    
+                    #for simulating arrivng at the target after 5 seconds. 
+                    #consider moving to a drone simulator / rely on sensor data
                     time.sleep(5)
                     self.send_command({
                         "command": "prox_alert"
