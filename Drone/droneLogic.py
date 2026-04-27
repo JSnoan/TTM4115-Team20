@@ -7,7 +7,7 @@ class DroneLogic:
         self.client = client
         self.pos = [63.42, 10.39]
         self.battery = 85
-        self.current_state = "initial"
+        self.current_state = "docked"
 
         # Transitions
 
