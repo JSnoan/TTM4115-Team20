@@ -1,6 +1,8 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+import argparse
+import os
 
 class MqttServer:
     def __init__(self, broker, port):
@@ -33,6 +35,7 @@ class MqttServer:
         state = data.get("state")
         battery = data.get("battery")
         pos = data.get("pos")
+        print(f"Drone status: state={state}, battery={battery}, pos={pos}")
         
         #removed while debugging
         #command = {"command": "continue"}
@@ -99,9 +102,14 @@ class MqttServer:
             self.client.loop_stop()
             self.client.disconnect()
 
-# Define broker and port    
-broker, port = "mqtt20.item.ntnu.no", 1883
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Team 20 MQTT mission server.")
+    parser.add_argument("--broker", default=os.getenv("MQTT_BROKER", "mqtt20.item.ntnu.no"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("MQTT_PORT", "1883")))
+    return parser.parse_args()
 
-# Start the MQTT server
-server = MqttServer(broker, port)
-server.start()
+
+if __name__ == "__main__":
+    args = parse_args()
+    server = MqttServer(args.broker, args.port)
+    server.start()

@@ -1,18 +1,38 @@
 import paho.mqtt.client as mqtt
 import time
 import json
+import argparse
+import os
 import threading
 import stmpy
 from droneLogic import DroneLogic
+from sense_reader import SenseReader
+from telemetry import TelemetrySimulator
 
 class DroneClient:
-    def __init__(self, broker, port):
+    def __init__(
+        self,
+        broker,
+        port,
+        drone_id="drone_1",
+        telemetry_interval=1.0,
+        auto_proximity=False,
+        mock_sense_hat=False,
+    ):
         self.broker = broker
         self.port = port
-        self.client = mqtt.Client(client_id="team20_drone")
+        self.drone_id = drone_id
+        self.telemetry_interval = telemetry_interval
+        self.auto_proximity = auto_proximity
+        self.proximity_sent = False
+        self.lock = threading.Lock()
+        self.client = mqtt.Client(client_id=f"team20_{drone_id}")
+        self.client.drone_id = drone_id
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.logic = DroneLogic(self.client)
+        self.sense_reader = SenseReader(use_mock=mock_sense_hat)
+        self.telemetry = TelemetrySimulator(self.logic)
         self.stm_driver = stmpy.Driver()
         self.stm_driver.add_machine(self.logic.stm)
 
@@ -48,6 +68,10 @@ class DroneClient:
             print(f"Ignored invalid command '{command}' while in state '{current_state}'")
             return
 
+        if command == "dispatch":
+            self.telemetry.set_target(payload.get("target"))
+            self.proximity_sent = False
+
         self.stm_driver.send(command, "droneMachine")
         print(f'sent command {command} to the state machine')
 
@@ -59,11 +83,13 @@ class DroneClient:
         self.stm_driver.start()
 
         try:
+            last_tick = time.time()
             while True:
-            #removed while debugging
-            #    self.logic.publish_status()
-                print("*publish*")
-                time.sleep(10)
+                now = time.time()
+                elapsed = now - last_tick
+                last_tick = now
+                self.publish_telemetry(elapsed)
+                time.sleep(self.telemetry_interval)
             
         except KeyboardInterrupt:
             print("Stopping drone client...")
@@ -74,7 +100,61 @@ class DroneClient:
             self.stm_driver.stop()
             print("Drone client stopped.")
 
-broker, port = "mqtt20.item.ntnu.no", 1883
+    def publish_telemetry(self, elapsed):
+        with self.lock:
+            telemetry_data = self.telemetry.tick(elapsed)
+            sense_hat_data = self.sense_reader.read()
 
-drone = DroneClient(broker, port)
-drone.start()
+            self.logic.publish_status({
+                "telemetry": telemetry_data,
+                "sense_hat": sense_hat_data,
+            })
+
+            distance_to_target = telemetry_data.get("distance_to_target_m")
+            if (
+                self.auto_proximity
+                and self.logic.current_state == "navigating"
+                and distance_to_target is not None
+                and distance_to_target <= 100
+                and not self.proximity_sent
+            ):
+                self.proximity_sent = True
+                self.stm_driver.send("prox_alert", "droneMachine")
+                print("Auto proximity alert sent to the state machine")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Team 20 drone client.")
+    parser.add_argument("--broker", default=os.getenv("MQTT_BROKER", "mqtt20.item.ntnu.no"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("MQTT_PORT", "1883")))
+    parser.add_argument("--drone-id", default=os.getenv("DRONE_ID", "drone_1"))
+    parser.add_argument(
+        "--telemetry-interval",
+        type=float,
+        default=float(os.getenv("TELEMETRY_INTERVAL", "1.0")),
+    )
+    parser.add_argument(
+        "--auto-proximity",
+        action="store_true",
+        default=os.getenv("DRONE_AUTO_PROXIMITY", "0") == "1",
+        help="Automatically sends prox_alert when simulated position is close to target.",
+    )
+    parser.add_argument(
+        "--mock-sense-hat",
+        action="store_true",
+        default=os.getenv("MOCK_SENSE_HAT", "0") == "1",
+        help="Use fake Sense HAT values on Mac/Linux/Windows development machines.",
+    )
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
+    drone = DroneClient(
+        args.broker,
+        args.port,
+        drone_id=args.drone_id,
+        telemetry_interval=args.telemetry_interval,
+        auto_proximity=args.auto_proximity,
+        mock_sense_hat=args.mock_sense_hat,
+    )
+    drone.start()

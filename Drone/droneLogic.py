@@ -5,7 +5,9 @@ import json
 class DroneLogic:
     def __init__(self, client):
         self.client = client
-        self.pos = [63.42, 10.39]
+        self.base_pos = [63.42, 10.39]
+        self.pos = list(self.base_pos)
+        self.target = None
         self.battery = 85
         self.current_state = "docked"
 
@@ -134,12 +136,17 @@ class DroneLogic:
     # Helper methods
     # ----------------
 
-    def publish_status(self):
+    def publish_status(self, extra_data=None):
         status_data = {
+            "drone_id": getattr(self.client, "drone_id", "drone_1"),
             "state": self.current_state,
             "pos": self.pos,
-            "battery": self.battery
+            "battery": round(self.battery, 1),
+            "target": self.target,
         }
+
+        if extra_data:
+            status_data.update(extra_data)
 
         self.client.publish("drone/status", json.dumps(status_data))
         print(f"Published status: {status_data}")
