@@ -15,7 +15,6 @@ class DroneClient:
         self.logic = DroneLogic(self.client)
         self.stm_driver = stmpy.Driver()
         self.stm_driver.add_machine(self.logic.stm)
-        self.stm_driver.start()
 
 
     def on_connect(self, client, userdata, flags, rc):
@@ -55,10 +54,25 @@ class DroneClient:
     def start(self):
         self.client.connect(self.broker, self.port)
         self.client.loop_start()
+        
+        time.sleep(1)
+        self.stm_driver.start()
 
-        while True:
-            self.logic.publish_status()
-            time.sleep(10)
+        try:
+            while True:
+            #removed while debugging
+            #    self.logic.publish_status()
+                print("*publish*")
+                time.sleep(10)
+            
+        except KeyboardInterrupt:
+            print("Stopping drone client...")
+
+        finally:
+            self.client.loop_stop()
+            self.client.disconnect()
+            self.stm_driver.stop()
+            print("Drone client stopped.")
 
 broker, port = "mqtt20.item.ntnu.no", 1883
 
