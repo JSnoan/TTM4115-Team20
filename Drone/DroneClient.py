@@ -110,7 +110,7 @@ class DroneClient:
                 now = time.time()
                 elapsed = now - last_tick
                 last_tick = now
-                self.publish_telemetry(elapsed)
+                #self.publish_telemetry(elapsed)
                 time.sleep(self.telemetry_interval)
             
         except KeyboardInterrupt:
