@@ -37,6 +37,7 @@ class MissionBridge:
             "target": None,
             "telemetry": {},
             "sense_hat": {},
+            "sense_hat_display": {},
         }
         self.last_state = None
         self.last_status_at = None

@@ -43,6 +43,7 @@ const elements = {
   position: document.querySelector("#position"),
   target: document.querySelector("#target"),
   senseHat: document.querySelector("#sense-hat"),
+  senseHatSource: document.querySelector("#sense-hat-source"),
   dispatchGuard: document.querySelector("#dispatch-guard"),
   mapRouteState: document.querySelector("#map-route-state"),
   statusAge: document.querySelector("#status-age"),
@@ -383,6 +384,7 @@ function renderStatus(status) {
   const state = status.state || "unknown";
   const telemetry = status.telemetry || {};
   const senseHat = status.sense_hat || {};
+  const senseHatDisplay = status.sense_hat_display || {};
   const allowed = status.allowed_commands || [];
   const battery = status.battery === null || status.battery === undefined ? null : Number(status.battery);
 
@@ -400,9 +402,10 @@ function renderStatus(status) {
   setText(elements.trackingBattery, battery === null ? "-" : `${battery.toFixed(1)}%`);
   setText(elements.position, formatCoordPair(status.pos));
   setText(elements.target, formatCoordPair(status.target));
+  setText(elements.senseHat, senseHatDisplay.label || "Waiting for display mode");
   setText(
-    elements.senseHat,
-    `${senseHat.source || "unknown"} / ${senseHat.available ? "available" : "not available"}`,
+    elements.senseHatSource,
+    `${senseHat.source || "unknown"} sensor / ${senseHatDisplay.source || "unknown"} display`,
   );
   setText(
     elements.dispatchGuard,

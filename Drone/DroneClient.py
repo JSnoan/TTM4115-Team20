@@ -7,9 +7,11 @@ import threading
 import stmpy
 from droneLogic import DroneLogic
 from sense_reader import SenseReader
+from sense_hat_display import SenseHatDisplay, mode_for_state
 from telemetry import TelemetrySimulator
 
 MIN_DISPATCH_BATTERY = 90
+DISPLAY_WARNING_SECONDS = 5
 
 class DroneClient:
     def __init__(
@@ -27,6 +29,8 @@ class DroneClient:
         self.telemetry_interval = telemetry_interval
         self.auto_proximity = auto_proximity
         self.proximity_sent = False
+        self.display_warning = None
+        self.display_warning_until = 0
         self.lock = threading.Lock()
         self.client = mqtt.Client(client_id=f"team20_{drone_id}")
         self.client.drone_id = drone_id
@@ -34,6 +38,10 @@ class DroneClient:
         self.client.on_message = self.on_message
         self.logic = DroneLogic(self.client)
         self.sense_reader = SenseReader(use_mock=mock_sense_hat)
+        self.sense_display = SenseHatDisplay(
+            use_mock=mock_sense_hat,
+            sense=self.sense_reader.sense,
+        )
         self.telemetry = TelemetrySimulator(self.logic)
         self.stm_driver = stmpy.Driver()
         self.stm_driver.add_machine(self.logic.stm)
@@ -79,6 +87,7 @@ class DroneClient:
                 "warning": "battery_too_low_for_dispatch",
                 "min_dispatch_battery": MIN_DISPATCH_BATTERY,
             })
+            self._set_display_warning("battery_too_low_for_dispatch")
             return
 
         if command == "dispatch":
@@ -110,6 +119,7 @@ class DroneClient:
         finally:
             self.client.loop_stop()
             self.client.disconnect()
+            self.sense_display.clear()
             self.stm_driver.stop()
             print("Drone client stopped.")
 
@@ -117,10 +127,12 @@ class DroneClient:
         with self.lock:
             telemetry_data = self.telemetry.tick(elapsed)
             sense_hat_data = self.sense_reader.read()
+            display_data = self._update_sense_display()
 
             self.logic.publish_status({
                 "telemetry": telemetry_data,
                 "sense_hat": sense_hat_data,
+                "sense_hat_display": display_data,
             })
 
             distance_to_target = telemetry_data.get("distance_to_target_m")
@@ -143,6 +155,24 @@ class DroneClient:
             ):
                 self.stm_driver.send("successfully_docked", "droneMachine")
                 print("Auto successfully_docked sent to the state machine")
+
+    def _set_display_warning(self, warning):
+        self.display_warning = warning
+        self.display_warning_until = time.time() + DISPLAY_WARNING_SECONDS
+
+    def _update_sense_display(self):
+        warning = None
+        if self.display_warning and time.time() < self.display_warning_until:
+            warning = self.display_warning
+        else:
+            self.display_warning = None
+
+        mode = mode_for_state(
+            self.logic.current_state,
+            self.logic.battery,
+            warning=warning,
+        )
+        return self.sense_display.show(mode)
 
 
 def parse_args():

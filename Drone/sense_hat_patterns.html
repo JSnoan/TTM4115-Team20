@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MedFly Sense HAT 8x8 Patterns</title>
+  <style>
+    :root {
+      --bg: #eef5fa;
+      --ink: #172232;
+      --muted: #66768a;
+      --panel: #ffffff;
+      --line: #d7e3ee;
+      --navy: #0f3760;
+      --teal: #12aaa3;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(18, 170, 163, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f8fbfd, var(--bg));
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-end;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(32px, 5vw, 64px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .badge {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #dff8f4;
+      color: #087970;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 18px 40px rgba(15, 55, 96, 0.08);
+      padding: 20px;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+      width: min(100%, 232px);
+      aspect-ratio: 1;
+      margin: 0 auto 18px;
+      padding: 12px;
+      border-radius: 18px;
+      background: #07111d;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .pixel {
+      border-radius: 5px;
+      background: rgb(var(--rgb));
+      box-shadow:
+        0 0 10px rgba(var(--rgb), 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .off {
+      opacity: 0.28;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .state {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .legend {
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: #fff;
+      padding: 20px;
+    }
+
+    .legend h2 {
+      margin-bottom: 12px;
+    }
+
+    .legend ul {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    @media (max-width: 720px) {
+      main {
+        width: min(100% - 22px, 1180px);
+        padding: 24px 0;
+      }
+
+      header {
+        display: block;
+      }
+
+      .badge {
+        display: inline-block;
+        margin-top: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Sense HAT 8x8 previews</h1>
+        <p>Exact pixel previews for the Raspberry Pi LED matrix used by DroneClient.py.</p>
+      </div>
+      <div class="badge">TTM4115 Team 20</div>
+    </header>
+
+    <section class="grid" id="patterns"></section>
+
+    <section class="legend">
+      <h2>Runtime mapping</h2>
+      <ul>
+        <li>docked + battery below 99%: yellow/green lightning bolt, charging.</li>
+        <li>docked + battery at 99% or above: full green battery.</li>
+        <li>navigating: blue/cyan outbound flight arrow.</li>
+        <li>manual_control: orange joystick, operator takeover near destination.</li>
+        <li>waiting_onsite: purple package with green check, arrived onsite.</li>
+        <li>returning: teal/blue dock base, returning to station.</li>
+        <li>low battery or rejected dispatch: white battery outline with red low charge.</li>
+        <li>critical fault or unknown state: red X.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const palette = {
+      ".": [0, 0, 0],
+      G: [0, 255, 90],
+      g: [0, 95, 45],
+      B: [40, 120, 255],
+      C: [0, 220, 220],
+      T: [0, 190, 165],
+      Y: [255, 205, 40],
+      O: [255, 120, 0],
+      R: [255, 25, 25],
+      P: [165, 90, 255],
+      W: [245, 250, 255],
+    };
+
+    const patterns = [
+      {
+        title: "Docked charging",
+        state: "docked, battery below 99%",
+        rows: ["W...Y..W", "...YY...", "..YYY...", ".YYYYY..", "...YY...", "..YY....", ".Y...W..", "Y......."],
+      },
+      {
+        title: "Docked fully charged",
+        state: "docked, battery full",
+        rows: ["........", ".WWWWW..", "WGGGGGW.", "WGGGGGWW", "WGGGGGWW", "WGGGGGW.", ".WWWWW..", "........"],
+      },
+      {
+        title: "Outbound flight",
+        state: "navigating",
+        rows: ["....B...", "...BBB..", "..CCB...", ".CCCB...", "..CCB...", "...BBB..", "....B...", "........"],
+      },
+      {
+        title: "Operator control",
+        state: "manual_control",
+        rows: ["...Y....", "..YYY...", "...Y....", "...O....", "..OOO...", ".OOOOO..", ".O.O.O..", "........"],
+      },
+      {
+        title: "Arrived onsite",
+        state: "waiting_onsite",
+        rows: ["..PPPP..", ".PYYYYP.", ".PYYYYP.", ".PYYYYP.", "..PPPP..", "....G...", "...GG...", "GGGG...."],
+      },
+      {
+        title: "Returning to dock",
+        state: "returning",
+        rows: ["...T....", "..TTT...", ".TTTTT..", "TTTTTTT.", ".B...B..", ".BBBBB..", ".BGGGB..", "BBBBBBB."],
+      },
+      {
+        title: "Low battery warning",
+        state: "battery low or dispatch rejected",
+        rows: ["........", ".WWWWW..", "WR....W.", "WR....WW", "WR....WW", "WR....W.", ".WWWWW..", "........"],
+      },
+      {
+        title: "Fault or unknown",
+        state: "critical fault",
+        rows: ["R......R", ".R....R.", "..R..R..", "...RR...", "...RR...", "..R..R..", ".R....R.", "R......R"],
+      },
+    ];
+
+    const container = document.querySelector("#patterns");
+
+    for (const pattern of patterns) {
+      const card = document.createElement("article");
+      card.className = "card";
+
+      const matrix = document.createElement("div");
+      matrix.className = "matrix";
+
+      for (const row of pattern.rows) {
+        for (const pixel of row) {
+          const rgb = palette[pixel];
+          const cell = document.createElement("div");
+          cell.className = pixel === "." ? "pixel off" : "pixel";
+          cell.style.setProperty("--rgb", rgb.join(", "));
+          matrix.appendChild(cell);
+        }
+      }
+
+      const title = document.createElement("h2");
+      title.textContent = pattern.title;
+
+      const state = document.createElement("p");
+      state.className = "state";
+      state.textContent = pattern.state;
+
+      card.append(matrix, title, state);
+      container.appendChild(card);
+    }
+  </script>
+</body>
+</html>
