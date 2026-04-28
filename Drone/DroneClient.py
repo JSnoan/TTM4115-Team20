@@ -37,7 +37,7 @@ class DroneClient:
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.logic = DroneLogic(self.client)
-        self.sense_reader = SenseReader(use_mock=mock_sense_hat)
+        self.sense_reader = SenseReader()
         self.sense_display = SenseHatDisplay(
             use_mock=mock_sense_hat,
             sense=self.sense_reader.sense,
