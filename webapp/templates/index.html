@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedFly Operations</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=leaflet-fix-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=server-bridge-1">
 </head>
 <body data-state="unknown">
   <div class="med-app">
@@ -213,14 +213,14 @@
               <div class="coordinate-card">
                 <div class="coordinate-head">
                   <strong>Origin</strong>
-                  <button class="small-btn active" data-map-mode="origin">Pick on map</button>
+                  <span class="base-lock">Base station</span>
                 </div>
                 <div class="coordinate-grid">
                   <label>Latitude
-                    <input id="emergency-origin-lat" type="number" step="0.000001" value="63.420000">
+                    <input id="emergency-origin-lat" type="number" step="0.000001" value="63.420000" readonly>
                   </label>
                   <label>Longitude
-                    <input id="emergency-origin-lon" type="number" step="0.000001" value="10.390000">
+                    <input id="emergency-origin-lon" type="number" step="0.000001" value="10.390000" readonly>
                   </label>
                 </div>
               </div>
@@ -255,9 +255,9 @@
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Interactive Trondheim map</p>
-                  <h2>Pick origin and destination</h2>
+                  <h2>Pick delivery destination</h2>
                 </div>
-                <span class="pill" id="map-mode-label">Picking origin</span>
+                <span class="pill" id="map-mode-label">Picking destination</span>
               </div>
 
               <div class="trondheim-map" id="emergency-map" role="application" aria-label="Real OpenStreetMap view of Trondheim">
@@ -267,7 +267,7 @@
               </div>
 
               <div class="map-summary">
-                <article><span>Origin</span><strong id="origin-readout">-</strong></article>
+                <article><span>Base</span><strong id="origin-readout">-</strong></article>
                 <article><span>Destination</span><strong id="destination-readout">-</strong></article>
                 <article><span>Approx route</span><strong id="emergency-distance">-</strong></article>
               </div>
@@ -404,6 +404,21 @@
                 <strong id="tracking-battery">-</strong>
               </div>
             </div>
+            <div class="tracking-map-shell">
+              <div class="tracking-map" id="tracking-map" role="application" aria-label="Live drone delivery map">
+                <div class="map-loading" id="tracking-map-loading">Loading live delivery map...</div>
+                <div class="tracking-map-popup" id="tracking-map-popup" aria-live="polite">
+                  <span id="tracking-popup-title">Final approach reached</span>
+                  <strong id="tracking-popup-message">Drone reached 99% of the route.</strong>
+                  <small>Mission server is handling the final approach.</small>
+                </div>
+              </div>
+              <div class="tracking-map-stats">
+                <article><span>Base</span><strong id="tracking-map-origin">-</strong></article>
+                <article><span>Drone</span><strong id="tracking-map-drone">-</strong></article>
+                <article><span>Drop-off</span><strong id="tracking-map-target">-</strong></article>
+              </div>
+            </div>
             <div class="route-track">
               <div class="route-track-line"><span id="journey-progress"></span></div>
               <div class="route-node start">BASE</div>
@@ -512,6 +527,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=leaflet-fix-1"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=server-bridge-1"></script>
 </body>
 </html>

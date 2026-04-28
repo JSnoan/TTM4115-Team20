@@ -23,11 +23,20 @@ const latestUseCases = {
   delivery_requests: [],
 };
 let latestStatus = {};
+let latestEvents = [];
+let lastPopupEventId = null;
 let mapMode = "origin";
 let emergencyLeafletMap = null;
 let originLeafletMarker = null;
 let destinationLeafletMarker = null;
 let emergencyRoutePolyline = null;
+let trackingLeafletMap = null;
+let trackingBaseMarker = null;
+let trackingTargetMarker = null;
+let trackingDroneMarker = null;
+let trackingRoutePolyline = null;
+let trackingReturnPolyline = null;
+let lastTrackingBoundsKey = "";
 
 const elements = {
   navTargets: [...document.querySelectorAll("[data-screen-target]")],
@@ -65,6 +74,14 @@ const elements = {
   journeyDrone: document.querySelector("#journey-drone"),
   routeStartLabel: document.querySelector("#route-start-label"),
   routeEndLabel: document.querySelector("#route-end-label"),
+  trackingMap: document.querySelector("#tracking-map"),
+  trackingMapLoading: document.querySelector("#tracking-map-loading"),
+  trackingMapPopup: document.querySelector("#tracking-map-popup"),
+  trackingPopupTitle: document.querySelector("#tracking-popup-title"),
+  trackingPopupMessage: document.querySelector("#tracking-popup-message"),
+  trackingMapOrigin: document.querySelector("#tracking-map-origin"),
+  trackingMapDrone: document.querySelector("#tracking-map-drone"),
+  trackingMapTarget: document.querySelector("#tracking-map-target"),
   rawStatus: document.querySelector("#raw-status"),
   events: document.querySelector("#events"),
   emergencyMap: document.querySelector("#emergency-map"),
@@ -174,11 +191,11 @@ function distanceMeters(a, b) {
 }
 
 function setMapMode(mode) {
-  mapMode = mode;
+  mapMode = mode === "origin" ? "destination" : mode;
   document.querySelectorAll("[data-map-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mapMode === mode);
+    button.classList.toggle("active", button.dataset.mapMode === mapMode);
   });
-  setText(elements.mapModeLabel, mode === "origin" ? "Picking origin" : "Picking destination");
+  setText(elements.mapModeLabel, "Picking destination");
 }
 
 function leafletLatLng(coord) {
@@ -194,6 +211,35 @@ function makeMapLabel(label, type) {
   });
 }
 
+function makeTrackingPin(label, type) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="tracking-pin ${type}">${label}</div>`,
+    iconSize: [76, 34],
+    iconAnchor: [38, 34],
+  });
+}
+
+function makeDroneIcon() {
+  return L.divIcon({
+    className: "",
+    html: `
+      <div class="tracking-drone-icon" aria-label="Drone">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="14" cy="16" r="8"></circle>
+          <circle cx="50" cy="16" r="8"></circle>
+          <circle cx="14" cy="48" r="8"></circle>
+          <circle cx="50" cy="48" r="8"></circle>
+          <path d="M20 20 32 32 44 20M20 44l12-12 12 12"></path>
+          <rect x="25" y="25" width="14" height="14" rx="4"></rect>
+        </svg>
+      </div>
+    `,
+    iconSize: [54, 54],
+    iconAnchor: [27, 27],
+  });
+}
+
 function initEmergencyMap() {
   if (emergencyLeafletMap || !elements.emergencyMap) return;
 
@@ -205,7 +251,8 @@ function initEmergencyMap() {
     return;
   }
 
-  const origin = readCoord(elements.originLat, elements.originLon) || BASE_POSITION;
+  updateBaseOriginInputs();
+  const origin = BASE_POSITION;
   const destination = readCoord(elements.emergencyLat, elements.emergencyLon) || TRONDHEIM_CENTER;
 
   emergencyLeafletMap = L.map(elements.emergencyMap, {
@@ -219,8 +266,8 @@ function initEmergencyMap() {
   }).addTo(emergencyLeafletMap);
 
   originLeafletMarker = L.marker(leafletLatLng(origin), {
-    draggable: true,
-    icon: makeMapLabel("Origin", "origin"),
+    draggable: false,
+    icon: makeMapLabel("Base", "origin"),
   }).addTo(emergencyLeafletMap);
 
   destinationLeafletMarker = L.marker(leafletLatLng(destination), {
@@ -235,22 +282,16 @@ function initEmergencyMap() {
     dashArray: "8 8",
   }).addTo(emergencyLeafletMap);
 
-  originLeafletMarker.on("dragend", () => {
-    const point = originLeafletMarker.getLatLng();
-    updateCoordInputs("origin", { lat: point.lat, lon: point.lng });
-  });
-
   destinationLeafletMarker.on("dragend", () => {
     const point = destinationLeafletMarker.getLatLng();
     updateCoordInputs("destination", { lat: point.lat, lon: point.lng });
   });
 
   emergencyLeafletMap.on("click", (event) => {
-    updateCoordInputs(mapMode, {
+    updateCoordInputs("destination", {
       lat: event.latlng.lat,
       lon: event.latlng.lng,
     });
-    if (mapMode === "origin") setMapMode("destination");
   });
 
   elements.mapLoading?.remove();
@@ -258,7 +299,8 @@ function initEmergencyMap() {
 }
 
 function updateEmergencyMap() {
-  const origin = readCoord(elements.originLat, elements.originLon) || BASE_POSITION;
+  updateBaseOriginInputs();
+  const origin = BASE_POSITION;
   const destination = readCoord(elements.emergencyLat, elements.emergencyLon);
 
   setText(elements.originReadout, formatCoordPair(origin));
@@ -279,13 +321,117 @@ function updateEmergencyMap() {
 
 function updateCoordInputs(mode, coord) {
   if (mode === "origin") {
-    elements.originLat.value = coord.lat.toFixed(6);
-    elements.originLon.value = coord.lon.toFixed(6);
+    updateBaseOriginInputs();
   } else {
     elements.emergencyLat.value = coord.lat.toFixed(6);
     elements.emergencyLon.value = coord.lon.toFixed(6);
   }
   updateEmergencyMap();
+}
+
+function updateBaseOriginInputs() {
+  if (elements.originLat) elements.originLat.value = BASE_POSITION.lat.toFixed(6);
+  if (elements.originLon) elements.originLon.value = BASE_POSITION.lon.toFixed(6);
+}
+
+function initTrackingMap() {
+  if (trackingLeafletMap || !elements.trackingMap) return;
+
+  if (!window.L) {
+    if (elements.trackingMapLoading) {
+      elements.trackingMapLoading.textContent = "Live map unavailable. Check internet access for Leaflet/OpenStreetMap.";
+      elements.trackingMapLoading.classList.add("error");
+    }
+    return;
+  }
+
+  trackingLeafletMap = L.map(elements.trackingMap, {
+    zoomControl: true,
+    scrollWheelZoom: true,
+  }).setView(leafletLatLng(TRONDHEIM_CENTER), 13);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(trackingLeafletMap);
+
+  trackingBaseMarker = L.marker(leafletLatLng(BASE_POSITION), {
+    icon: makeTrackingPin("Base", "base"),
+  }).addTo(trackingLeafletMap);
+
+  trackingTargetMarker = L.marker(leafletLatLng(readCoord(elements.targetLat, elements.targetLon) || TRONDHEIM_CENTER), {
+    icon: makeTrackingPin("Drop", "target"),
+  }).addTo(trackingLeafletMap);
+
+  trackingDroneMarker = L.marker(leafletLatLng(BASE_POSITION), {
+    icon: makeDroneIcon(),
+    zIndexOffset: 700,
+  }).addTo(trackingLeafletMap);
+
+  trackingRoutePolyline = L.polyline([leafletLatLng(BASE_POSITION), leafletLatLng(TRONDHEIM_CENTER)], {
+    color: "#12aaa4",
+    weight: 5,
+    opacity: 0.9,
+  }).addTo(trackingLeafletMap);
+
+  trackingReturnPolyline = L.polyline([], {
+    color: "#f0a020",
+    weight: 4,
+    opacity: 0.9,
+    dashArray: "8 10",
+  }).addTo(trackingLeafletMap);
+
+  elements.trackingMapLoading?.remove();
+  updateTrackingMap(latestStatus);
+}
+
+function trackingTarget(status) {
+  return normalizeCoord(status.target) || readCoord(elements.targetLat, elements.targetLon) || null;
+}
+
+function updateTrackingMap(status = {}) {
+  setText(elements.trackingMapOrigin, formatCoordPair(BASE_POSITION));
+
+  const target = trackingTarget(status);
+  const dronePosition = normalizeCoord(status.pos) || BASE_POSITION;
+  setText(elements.trackingMapDrone, formatCoordPair(dronePosition));
+  setText(elements.trackingMapTarget, target ? formatCoordPair(target) : "-");
+
+  if (!trackingLeafletMap || !trackingBaseMarker || !trackingTargetMarker || !trackingDroneMarker) {
+    return;
+  }
+
+  trackingBaseMarker.setLatLng(leafletLatLng(BASE_POSITION));
+  trackingDroneMarker.setLatLng(leafletLatLng(dronePosition));
+
+  if (target) {
+    trackingTargetMarker.setLatLng(leafletLatLng(target));
+    trackingTargetMarker.addTo(trackingLeafletMap);
+    trackingRoutePolyline.setLatLngs([leafletLatLng(BASE_POSITION), leafletLatLng(target)]);
+
+    if (status.state === "returning") {
+      trackingReturnPolyline.setLatLngs([leafletLatLng(dronePosition), leafletLatLng(BASE_POSITION)]);
+    } else {
+      trackingReturnPolyline.setLatLngs([]);
+    }
+
+    const boundsKey = `${target.lat.toFixed(5)}:${target.lon.toFixed(5)}`;
+
+    if (boundsKey !== lastTrackingBoundsKey) {
+      lastTrackingBoundsKey = boundsKey;
+      const bounds = L.latLngBounds([
+        leafletLatLng(BASE_POSITION),
+        leafletLatLng(target),
+        leafletLatLng(dronePosition),
+      ]);
+      trackingLeafletMap.fitBounds(bounds.pad(0.24), { animate: true, maxZoom: 15 });
+    }
+  } else {
+    trackingTargetMarker.remove();
+    trackingRoutePolyline.setLatLngs([]);
+    trackingReturnPolyline.setLatLngs([]);
+    trackingLeafletMap.setView(leafletLatLng(BASE_POSITION), 13);
+  }
 }
 
 function activateScreen(screenName) {
@@ -304,6 +450,15 @@ function activateScreen(screenName) {
       updateEmergencyMap();
     });
   }
+
+  if (screenName === "tracking") {
+    requestAnimationFrame(() => {
+      initTrackingMap();
+      trackingLeafletMap?.invalidateSize();
+      updateTrackingMap(latestStatus);
+      handlePopupEvents(latestEvents);
+    });
+  }
 }
 
 function showFeedback(message, kind = "ok") {
@@ -315,6 +470,39 @@ function showFeedback(message, kind = "ok") {
     elements.feedback.textContent = "";
     elements.feedback.removeAttribute("data-kind");
   }, 3600);
+}
+
+function showTrackingMapPopup(event) {
+  if (!elements.trackingMapPopup) return;
+
+  setText(elements.trackingPopupTitle, event.title || "Final approach reached");
+  setText(
+    elements.trackingPopupMessage,
+    event.message || "Drone reached 99% of the route. Final guidance has started.",
+  );
+
+  elements.trackingMapPopup.classList.add("active");
+  window.clearTimeout(showTrackingMapPopup.timeout);
+  showTrackingMapPopup.timeout = window.setTimeout(() => {
+    elements.trackingMapPopup?.classList.remove("active");
+  }, Number(event.duration_ms || 2000));
+}
+
+function handlePopupEvents(events) {
+  const trackingScreen = document.querySelector("#screen-tracking");
+  if (!trackingScreen?.classList.contains("active")) return;
+
+  const now = Date.now();
+  const popupEvent = events.find((event) => {
+    if (!event.popup || event.id === lastPopupEventId) return false;
+    if (!event.timestamp) return true;
+    return now - Number(event.timestamp) * 1000 < 10000;
+  });
+
+  if (!popupEvent) return;
+
+  lastPopupEventId = popupEvent.id;
+  showTrackingMapPopup(popupEvent);
 }
 
 function activeMissionLabel() {
@@ -371,6 +559,7 @@ function updateJourney(status) {
     elements.mapRouteState,
     target && pos ? `${formatMeters(distanceMeters(pos, target))} to target` : "No active route",
   );
+  updateTrackingMap(status);
 }
 
 function updateCommunication(status) {
@@ -563,7 +752,7 @@ function renderUseCases(data) {
         <span data-status="${escapeHtml(request.status)}">${escapeHtml(request.status)}</span>
       </div>
       <p>${escapeHtml(request.need)} · ${escapeHtml(request.priority || "urgent")}</p>
-      <small>Origin: ${formatCoordPair(request.origin)}</small>
+      <small>Base: ${formatCoordPair(request.origin)}</small>
       <small>Destination: ${formatCoordPair(request.target)}</small>
       <small>${escapeHtml(request.notes || "No notes")}</small>
     `,
@@ -617,6 +806,7 @@ async function refreshEvents() {
     const response = await fetch("/api/events");
     const data = await response.json();
     const events = data.events || [];
+    latestEvents = events;
     elements.events.innerHTML = "";
 
     if (!events.length) {
@@ -631,6 +821,8 @@ async function refreshEvents() {
       item.innerHTML = `<span>${escapeHtml(event.time)}</span><strong>${escapeHtml(event.kind)}</strong>${escapeHtml(event.message)}`;
       elements.events.appendChild(item);
     }
+
+    handlePopupEvents(events);
   } catch (error) {
     // Diagnostics can wait until the server is reachable.
   }
@@ -716,6 +908,10 @@ document.querySelectorAll("[data-map-mode]").forEach((button) => {
   input?.addEventListener("input", updateEmergencyMap);
 });
 
+[elements.targetLat, elements.targetLon].forEach((input) => {
+  input?.addEventListener("input", () => updateTrackingMap(latestStatus));
+});
+
 elements.createEmergency?.addEventListener("click", () => {
   runUseCaseAction(async () => {
     const result = await postJson("/api/emergency", {
@@ -792,7 +988,8 @@ elements.dispatchDelivery?.addEventListener("click", () => {
   }, { screen: "tracking" });
 });
 
-setMapMode("origin");
+setMapMode("destination");
+updateBaseOriginInputs();
 updateEmergencyMap();
 refreshStatus();
 refreshEvents();
