@@ -156,4 +156,4 @@ class DroneLogic:
             status_data.update(extra_data)
 
         self.client.publish("drone/status", json.dumps(status_data))
-        print(f"Published status: {status_data}")
+        # print(f"Published status: {status_data}")
