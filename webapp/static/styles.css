@@ -1289,6 +1289,21 @@ input[readonly]:focus {
   color: var(--text);
 }
 
+.mission-action-hint {
+  margin: 12px 0 0;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.mission-action-hint[hidden] {
+  display: none;
+}
+
 .tracking-map-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

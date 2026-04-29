@@ -39,6 +39,7 @@ let trackingDroneMarker = null;
 let trackingRoutePolyline = null;
 let trackingReturnPolyline = null;
 let lastTrackingBoundsKey = "";
+let selectedMissionOptionId = "";
 
 const elements = {
   navTargets: [...document.querySelectorAll("[data-screen-target]")],
@@ -130,6 +131,7 @@ const elements = {
   missionOrderSelect: document.querySelector("#mission-order-select"),
   missionOrderDetail: document.querySelector("#mission-order-detail"),
   dispatchSelectedOrder: document.querySelector("#dispatch-selected-order"),
+  missionActionHint: document.querySelector("#mission-action-hint"),
 };
 
 const commandButtons = [...document.querySelectorAll("[data-command]")];
@@ -399,8 +401,18 @@ function initTrackingMap() {
   updateTrackingMap(latestStatus);
 }
 
+function activeMissionFromStatus(status = latestStatus) {
+  return status.active_mission || status.mission || null;
+}
+
 function trackingTarget(status) {
-  return normalizeCoord(status.target) || readCoord(elements.targetLat, elements.targetLon) || null;
+  const activeMission = activeMissionFromStatus(status);
+  if (activeMission) {
+    return normalizeCoord(status.target) || normalizeCoord(activeMission.target) || readCoord(elements.targetLat, elements.targetLon) || null;
+  }
+
+  const selectedOrder = selectedMissionOrder({ preferActive: false });
+  return normalizeCoord(selectedOrder?.target) || readCoord(elements.targetLat, elements.targetLon) || normalizeCoord(status.target) || null;
 }
 
 function updateTrackingMap(status = {}) {
@@ -521,7 +533,7 @@ function handlePopupEvents(events) {
 }
 
 function activeMissionLabel() {
-  const mission = latestStatus.active_mission || latestStatus.mission;
+  const mission = activeMissionFromStatus(latestStatus);
   if (mission) {
     return {
       title: mission.label || "Active drone mission",
@@ -584,15 +596,16 @@ function missionOrders() {
   return [...emergencyOrders, ...routineOrders];
 }
 
-function selectedMissionOrder() {
-  const selected = elements.missionOrderSelect?.value;
+function selectedMissionOrder(options = {}) {
+  const preferActive = options.preferActive !== false;
+  const selected = selectedMissionOptionId || elements.missionOrderSelect?.value;
   const orders = missionOrders();
-  const activeMission = latestStatus.active_mission || latestStatus.mission;
+  const activeMission = activeMissionFromStatus(latestStatus);
   const activeOrder = orders.find(
     (order) => order.process_type === activeMission?.process_type
       && Number(order.id) === Number(activeMission?.order_id),
   );
-  if (activeOrder) return activeOrder;
+  if (preferActive && activeOrder) return activeOrder;
   return orders.find((order) => order.option_id === selected) || orders.find((order) => orderStatusAllowsDispatch(order.status)) || orders[0] || null;
 }
 
@@ -608,10 +621,11 @@ function renderMissionOrderSelect() {
   if (!elements.missionOrderSelect) return;
 
   const orders = missionOrders();
-  const previousValue = elements.missionOrderSelect.value;
+  const previousValue = selectedMissionOptionId || elements.missionOrderSelect.value;
   elements.missionOrderSelect.innerHTML = "";
 
   if (!orders.length) {
+    selectedMissionOptionId = "";
     const option = document.createElement("option");
     option.value = "";
     option.textContent = "No orders available";
@@ -627,7 +641,7 @@ function renderMissionOrderSelect() {
     elements.missionOrderSelect.appendChild(option);
   }
 
-  const activeMission = latestStatus.active_mission || latestStatus.mission;
+  const activeMission = activeMissionFromStatus(latestStatus);
   const activeOrder = orders.find(
     (order) => order.process_type === activeMission?.process_type
       && Number(order.id) === Number(activeMission?.order_id),
@@ -641,6 +655,7 @@ function renderMissionOrderSelect() {
     const preferred = orders.find((order) => orderStatusAllowsDispatch(order.status)) || orders[0];
     elements.missionOrderSelect.value = preferred.option_id;
   }
+  selectedMissionOptionId = elements.missionOrderSelect.value;
 
   const order = selectedMissionOrder();
   const restricted = order?.restricted_zone ? " · restricted destination" : "";
@@ -655,22 +670,30 @@ function renderMissionOrderSelect() {
 
 function renderMissionControls(status) {
   const order = selectedMissionOrder();
-  const activeMission = status.active_mission || status.mission || null;
+  const activeMission = activeMissionFromStatus(status);
   const state = status.state || "unknown";
+  const allowed = status.allowed_commands || [];
   const batteryValue = status.battery === null || status.battery === undefined ? null : Number(status.battery);
-  const canDispatch = Boolean(order)
+  const showDispatch = Boolean(order)
     && orderStatusAllowsDispatch(order.status)
     && state === "docked"
-    && (batteryValue === null || batteryValue >= MIN_DISPATCH_BATTERY);
+    && !activeMission;
+  const canDispatch = showDispatch && (batteryValue === null || batteryValue >= MIN_DISPATCH_BATTERY);
 
   if (elements.dispatchSelectedOrder) {
+    elements.dispatchSelectedOrder.hidden = !showDispatch;
     elements.dispatchSelectedOrder.disabled = !canDispatch;
     elements.dispatchSelectedOrder.textContent = order
       ? `Dispatch ${processLabel(order.process_type)}`
       : "Dispatch Selected Order";
+    elements.dispatchSelectedOrder.title = showDispatch && !canDispatch
+      ? "Dispatch requires at least 90% battery"
+      : "";
   }
 
   const routineActive = activeMission?.process_type === PROCESS_ROUTINE;
+  const processType = activeMission?.process_type || order?.process_type || null;
+  const phase = activeMission?.phase || "";
   const restrictedRoutineAlert = routineActive
     && activeMission?.phase === "restricted_alert"
     && state === "manual_control";
@@ -682,14 +705,54 @@ function renderMissionControls(status) {
   const manualCompleteButton = document.querySelector("[data-command='manual_complete']");
   const manualAbortButton = document.querySelector("[data-command='manual_abort']");
   const missionCompleteButton = document.querySelector("[data-command='mission_complete']");
+  const navAbortButton = document.querySelector("[data-command='nav_abort']");
+  const dockedButton = document.querySelector("[data-command='successfully_docked']");
 
-  if (manualCompleteButton) manualCompleteButton.hidden = routineActive;
-  if (manualAbortButton) manualAbortButton.hidden = routineActive;
-  if (missionCompleteButton) missionCompleteButton.hidden = routineActive && activeMission?.phase !== "manual_guidance";
+  const setCommandVisibility = (button, visible) => {
+    if (!button) return false;
+    button.hidden = !visible;
+    if (visible) {
+      button.disabled = !allowed.includes(button.dataset.command);
+    }
+    return visible;
+  };
+
+  const visibleActions = [
+    showDispatch,
+    setCommandVisibility(navAbortButton, state === "navigating" && phase !== "delivering_medicine"),
+    setCommandVisibility(
+      manualCompleteButton,
+      state === "manual_control" && processType !== PROCESS_ROUTINE,
+    ),
+    setCommandVisibility(
+      manualAbortButton,
+      state === "manual_control" && processType !== PROCESS_ROUTINE,
+    ),
+    setCommandVisibility(
+      missionCompleteButton,
+      state === "waiting_onsite" && processType !== PROCESS_ROUTINE,
+    ),
+    setCommandVisibility(dockedButton, state === "returning"),
+  ].filter(Boolean).length;
+
+  if (elements.missionActionHint) {
+    elements.missionActionHint.hidden = visibleActions > 0;
+    if (!visibleActions) {
+      if (restrictedRoutineAlert) {
+        elements.missionActionHint.textContent = "Use the restricted zone alert on the map to resolve this routine delivery.";
+      } else if (state === "navigating" && phase === "delivering_medicine") {
+        elements.missionActionHint.textContent = "Medicine delivery is being handled automatically by the mission server.";
+      } else if (!order) {
+        elements.missionActionHint.textContent = "Create an emergency or routine medicine order first.";
+      } else {
+        elements.missionActionHint.textContent = "No manual action is needed for this step.";
+      }
+    }
+  }
 }
 
 function routeProgress(status) {
-  const target = normalizeCoord(status.target);
+  const target = trackingTarget(status);
   const pos = normalizeCoord(status.pos) || BASE_POSITION;
   if (!target) return 0;
   const routeDistance = distanceMeters(BASE_POSITION, target) || 1;
@@ -700,7 +763,7 @@ function routeProgress(status) {
 function updateJourney(status) {
   const progress = routeProgress(status);
   const pct = Math.round(progress * 100);
-  const target = normalizeCoord(status.target);
+  const target = trackingTarget(status);
   const pos = normalizeCoord(status.pos);
 
   setText(elements.dashboardProgress, `${pct}%`);
@@ -1071,7 +1134,8 @@ document.querySelectorAll("[data-map-mode]").forEach((button) => {
 });
 
 elements.missionOrderSelect?.addEventListener("change", () => {
-  const order = selectedMissionOrder();
+  selectedMissionOptionId = elements.missionOrderSelect.value;
+  const order = selectedMissionOrder({ preferActive: false });
   const restricted = order?.restricted_zone ? " · restricted destination" : "";
   setText(
     elements.missionOrderDetail,

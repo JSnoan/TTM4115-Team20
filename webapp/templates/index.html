@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedFly Operations</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=mission-types-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=mission-types-2">
 </head>
 <body data-state="unknown">
   <div class="med-app">
@@ -465,6 +465,7 @@
                 <button data-command="nav_abort" class="btn danger">Abort Navigation</button>
                 <button data-command="manual_abort" class="btn danger">Abort Manual Guidance</button>
               </div>
+              <p class="mission-action-hint" id="mission-action-hint">Select an order to see the next available action.</p>
             </section>
 
             <section class="panel">
@@ -536,6 +537,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=mission-types-1"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=mission-types-2"></script>
 </body>
 </html>
