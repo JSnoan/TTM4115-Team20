@@ -8,9 +8,10 @@ import stmpy
 from droneLogic import DroneLogic
 from sense_reader import SenseReader
 from sense_hat_display import SenseHatDisplay, mode_for_state
-from telemetry import TelemetrySimulator
+from telemetry import TelemetrySimulator, distance_meters
 
 MIN_DISPATCH_BATTERY = 90
+BASE_DOCKED_RADIUS_M = 5
 DISPLAY_WARNING_SECONDS = 5
 AUTO_RETURN_BATTERY_THRESHOLD = 25
 
@@ -70,7 +71,7 @@ class DroneClient:
         
         allowed_commands = {
             "docked": ["dispatch"],
-            "navigating": ["prox_alert", "nav_abort"],
+            "navigating": ["prox_alert", "nav_abort", "dropoff_complete"],
             "manual_control": ["manual_complete", "manual_abort"],
             "waiting_onsite": ["mission_complete"],
             "returning": ["successfully_docked"],
@@ -92,9 +93,25 @@ class DroneClient:
             self._set_display_warning("battery_too_low_for_dispatch")
             return
 
+        if command == "successfully_docked":
+            distance_to_base = distance_meters(self.logic.pos, self.logic.base_pos)
+            if distance_to_base > BASE_DOCKED_RADIUS_M:
+                print(
+                    "Ignored successfully_docked: drone is "
+                    f"{distance_to_base:.1f} m from base"
+                )
+                self.logic.publish_status({
+                    "warning": "not_at_base_for_docked_confirmation",
+                    "distance_to_base_m": round(distance_to_base, 1),
+                })
+                return
+
         if command == "dispatch":
             self.telemetry.set_target(payload.get("target"))
+            self.logic.mission = payload.get("mission")
             self.proximity_sent = False
+        elif command == "successfully_docked":
+            self.logic.mission = None
             self.low_battery_return_sent = False
 
         self.stm_driver.send(command, "droneMachine")
@@ -186,6 +203,7 @@ class DroneClient:
                 and distance_to_base is not None
                 and distance_to_base <= 1
             ):
+                self.logic.mission = None
                 self.stm_driver.send("successfully_docked", "droneMachine")
                 print("Auto successfully_docked sent to the state machine")
 

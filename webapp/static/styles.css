@@ -1177,6 +1177,19 @@ input[readonly]:focus {
   transform: translate(-50%, 0) scale(1);
 }
 
+.tracking-map-popup[data-kind="restricted_zone_detected"] {
+  background:
+    linear-gradient(135deg, rgba(121, 24, 24, 0.97), rgba(223, 59, 53, 0.92)),
+    var(--red);
+}
+
+.tracking-map-popup[data-kind="routine_delivery_started"],
+.tracking-map-popup[data-kind="dropping_medicine"] {
+  background:
+    linear-gradient(135deg, rgba(8, 33, 61, 0.96), rgba(240, 160, 32, 0.9)),
+    var(--amber);
+}
+
 .tracking-map-popup span {
   color: rgba(255, 255, 255, 0.68);
   font-size: 12px;
@@ -1194,6 +1207,159 @@ input[readonly]:focus {
   color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
   font-weight: 750;
+}
+
+.restricted-map-alert {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1050;
+  display: grid;
+  gap: 8px;
+  width: min(420px, calc(100% - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(121, 24, 24, 0.96), rgba(223, 59, 53, 0.92));
+  box-shadow: 0 18px 36px rgba(121, 24, 24, 0.28);
+  color: #fff;
+  padding: 16px;
+}
+
+.restricted-map-alert[hidden] {
+  display: none;
+}
+
+.restricted-map-alert span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.restricted-map-alert strong,
+.restricted-map-alert small {
+  display: block;
+}
+
+.restricted-map-alert strong {
+  font-size: 21px;
+  line-height: 1.1;
+}
+
+.restricted-map-alert small {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.restricted-map-alert div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mission-order-box {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.mission-order-box label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.mission-order-box p {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.process-flow-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(18, 170, 163, 0.12), rgba(255, 255, 255, 0.9));
+  padding: 14px;
+}
+
+.process-flow-card[data-process="emergency_first_aid"] {
+  border-color: rgba(223, 59, 53, 0.32);
+  background: linear-gradient(135deg, rgba(223, 59, 53, 0.12), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card[data-process="routine_medicine"] {
+  border-color: rgba(18, 170, 163, 0.32);
+  background: linear-gradient(135deg, rgba(18, 170, 163, 0.13), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card[data-restricted="true"] {
+  border-color: rgba(240, 160, 32, 0.54);
+  background: linear-gradient(135deg, rgba(240, 160, 32, 0.16), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card span {
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.process-flow-card[data-process="emergency_first_aid"] span {
+  color: var(--red);
+}
+
+.process-flow-card[data-restricted="true"] span {
+  color: #a56a00;
+}
+
+.process-flow-card strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.process-flow-card small {
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.target-grid input[readonly] {
+  color: var(--text);
+}
+
+.mission-action-hint {
+  margin: 12px 0 0;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.mission-action-hint[hidden] {
+  display: none;
+}
+
+.command-grid [hidden],
+.command-grid .is-hidden {
+  display: none !important;
 }
 
 .tracking-map-stats {

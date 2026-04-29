@@ -227,6 +227,11 @@ def create_app(bridge):
         result = bridge.send_request("dispatch_emergency", {"request_id": request_id})
         return jsonify(result), status_code_for(result)
 
+    @app.route("/api/orders/dispatch", methods=["POST"])
+    def api_dispatch_order():
+        result = bridge.send_request("dispatch_order", request.get_json(silent=True) or {})
+        return jsonify(result), status_code_for(result)
+
     @app.route("/api/register", methods=["POST"])
     def api_register():
         result = bridge.send_request("register", request.get_json(silent=True) or {})
@@ -245,6 +250,11 @@ def create_app(bridge):
     @app.route("/api/delivery/<int:delivery_id>/dispatch", methods=["POST"])
     def api_dispatch_delivery(delivery_id):
         result = bridge.send_request("dispatch_delivery", {"delivery_id": delivery_id})
+        return jsonify(result), status_code_for(result)
+
+    @app.route("/api/restricted/solve", methods=["POST"])
+    def api_solve_restricted():
+        result = bridge.send_request("solve_restricted_delivery", request.get_json(silent=True) or {})
         return jsonify(result), status_code_for(result)
 
     return app
@@ -275,6 +285,8 @@ if __name__ == "__main__":
     app = create_app(bridge)
 
     try:
+        display_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
+        print(f"Web app running at http://{display_host}:{args.web_port}", flush=True)
         app.run(host=args.host, port=args.web_port, debug=False)
     finally:
         bridge.stop()

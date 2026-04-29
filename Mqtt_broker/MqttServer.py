@@ -23,10 +23,21 @@ BASE_POSITION = {"lat": 63.42, "lon": 10.39}
 MIN_DISPATCH_BATTERY = 90
 PROXIMITY_PROGRESS_THRESHOLD = 0.99
 MANUAL_DECISION_DELAY_SECONDS = 2.0
+ROUTINE_DROPOFF_SECONDS = 5.0
+BASE_DESTINATION_MIN_DISTANCE_M = 10
+BASE_DOCKED_RADIUS_M = 5
+RESTRICTED_ZONE_RADIUS_M = 25
+PROCESS_EMERGENCY = "emergency_first_aid"
+PROCESS_ROUTINE = "routine_medicine"
+RESTRICTED_ZONES = [
+    {"lat": 63.440712, "lon": 10.403904},
+    {"lat": 63.422439, "lon": 10.442377},
+    {"lat": 63.415372, "lon": 10.351003},
+]
 
 ALLOWED_COMMANDS = {
     "docked": ["dispatch"],
-    "navigating": ["prox_alert", "nav_abort"],
+    "navigating": ["prox_alert", "nav_abort", "dropoff_complete"],
     "manual_control": ["manual_complete", "manual_abort"],
     "waiting_onsite": ["mission_complete"],
     "returning": ["successfully_docked"],
@@ -59,8 +70,10 @@ class MqttServer:
         self.emergency_requests = []
         self.registrations = []
         self.delivery_requests = []
+        self.active_mission = None
         self.proximity_sent = False
         self.manual_decision_timer = None
+        self.routine_dropoff_timer = None
 
         client_id = f"team20_server_{os.getpid()}_{int(time.time())}"
         self.client = mqtt.Client(
@@ -112,6 +125,7 @@ class MqttServer:
 
         if state != self.last_state:
             self.add_event("status", f"Drone state changed to {state}")
+            self._handle_state_change(state)
             self.last_state = state
 
         print(f"Drone status: state={state}, battery={battery}, pos={pos}")
@@ -128,6 +142,8 @@ class MqttServer:
                 result = self.send_command(data.get("command"), target=data.get("target"))
             elif action == "create_emergency":
                 result = self.create_emergency_request(data)
+            elif action == "dispatch_order":
+                result = self.dispatch_order(data.get("process_type"), data.get("order_id"))
             elif action == "dispatch_emergency":
                 result = self.dispatch_emergency_request(data.get("request_id"))
             elif action == "register":
@@ -138,6 +154,8 @@ class MqttServer:
                 result = self.approve_delivery_request(data.get("delivery_id"))
             elif action == "dispatch_delivery":
                 result = self.dispatch_delivery_request(data.get("delivery_id"))
+            elif action == "solve_restricted_delivery":
+                result = self.solve_restricted_delivery(data.get("decision"))
             else:
                 result = {"ok": False, "error": f"Unknown server action: {action}"}
         except Exception as err:
@@ -146,7 +164,7 @@ class MqttServer:
         self.publish_all()
         self.publish_response(request_id, result)
 
-    def send_command(self, command, target=None):
+    def send_command(self, command, target=None, mission=None):
         if not command:
             return {"ok": False, "error": "Missing command"}
 
@@ -160,6 +178,19 @@ class MqttServer:
                 "error": f"Command {command} is not valid while state is {state}",
                 "state": state,
             }
+
+        if command == "successfully_docked":
+            distance_to_base = self._distance_to_base_from_status(status)
+            if distance_to_base is None or distance_to_base > BASE_DOCKED_RADIUS_M:
+                distance_text = "unknown" if distance_to_base is None else f"{distance_to_base:.1f} m"
+                return {
+                    "ok": False,
+                    "error": (
+                        "Drone can only be confirmed docked at the base station. "
+                        f"Current distance to base: {distance_text}."
+                    ),
+                    "state": state,
+                }
 
         battery = status.get("battery")
         if command == "dispatch" and battery is not None and battery < MIN_DISPATCH_BATTERY:
@@ -177,6 +208,10 @@ class MqttServer:
             command_payload["target"] = target or {"lat": 63.425, "lon": 10.395}
             self.proximity_sent = False
             self._cancel_manual_decision_timer()
+            self._cancel_routine_dropoff_timer()
+
+        if mission:
+            command_payload["mission"] = mission
 
         self.client.publish(COMMAND_TOPIC, json.dumps(command_payload))
         print(f"Sent command to drone: {command_payload}")
@@ -187,9 +222,13 @@ class MqttServer:
         target = self._parse_target(data)
         if target is None:
             return {"ok": False, "error": "Emergency request needs valid latitude and longitude"}
+        validation = self._validate_destination(target)
+        if not validation["ok"]:
+            return validation
 
         request_record = {
             "id": self.next_emergency_id,
+            "process_type": PROCESS_EMERGENCY,
             "requester": data.get("requester") or "Unknown requester",
             "contact": data.get("contact") or "No contact provided",
             "need": data.get("need") or "first_aid",
@@ -197,6 +236,7 @@ class MqttServer:
             "notes": data.get("notes") or "",
             "origin": dict(BASE_POSITION),
             "target": target,
+            "restricted_zone": self._is_restricted_destination(target),
             "status": "created",
             "created_at": datetime.now().strftime("%H:%M:%S"),
         }
@@ -206,20 +246,18 @@ class MqttServer:
         return {"ok": True, "request": request_record}
 
     def dispatch_emergency_request(self, request_id):
-        request_record = self._find_by_id(self.emergency_requests, request_id)
-        if request_record is None:
-            return {"ok": False, "error": f"Emergency request #{request_id} not found"}
-
-        result = self.send_command("dispatch", target=request_record["target"])
-        if result["ok"]:
-            request_record["status"] = "dispatched"
-            self.add_event("uc1", f"Emergency request #{request_id} dispatched")
-        return result | {"request": request_record}
+        result = self.dispatch_order(PROCESS_EMERGENCY, request_id)
+        if "order" in result:
+            result["request"] = result["order"]
+        return result
 
     def register_requester(self, data):
         target = self._parse_target(data)
         if target is None:
             return {"ok": False, "error": "Registration needs valid drop-off latitude and longitude"}
+        validation = self._validate_destination(target)
+        if not validation["ok"]:
+            return validation
 
         medicines = self._parse_medicines(data.get("medicines"))
         approved_medicines = [
@@ -237,6 +275,7 @@ class MqttServer:
             "patient_id": patient_id or "missing",
             "address": data.get("address") or "No address provided",
             "dropoff": target,
+            "restricted_zone": self._is_restricted_destination(target),
             "dropoff_notes": data.get("dropoff_notes") or "No drop-off note",
             "container": data.get("container") or "standard drop-off point",
             "approved_medicines": approved_medicines if approved else [],
@@ -266,12 +305,14 @@ class MqttServer:
 
         delivery = {
             "id": self.next_delivery_id,
+            "process_type": PROCESS_ROUTINE,
             "registration_id": registration_id,
             "requester": registration["requester"],
             "medicine": medicine,
             "order_type": "routine_medicine",
             "priority": data.get("priority") or "standard",
             "target": registration["dropoff"],
+            "restricted_zone": bool(registration.get("restricted_zone")),
             "status": "queued",
             "created_at": datetime.now().strftime("%H:%M:%S"),
         }
@@ -290,17 +331,97 @@ class MqttServer:
         return {"ok": True, "delivery": delivery}
 
     def dispatch_delivery_request(self, delivery_id):
-        delivery = self._find_by_id(self.delivery_requests, delivery_id)
-        if delivery is None:
-            return {"ok": False, "error": f"Delivery #{delivery_id} not found"}
-        if delivery["status"] not in ["approved", "queued"]:
-            return {"ok": False, "error": f"Delivery #{delivery_id} is already {delivery['status']}"}
+        result = self.dispatch_order(PROCESS_ROUTINE, delivery_id)
+        if "order" in result:
+            result["delivery"] = result["order"]
+        return result
 
-        result = self.send_command("dispatch", target=delivery["target"])
+    def dispatch_order(self, process_type, order_id):
+        if process_type == PROCESS_EMERGENCY:
+            order = self._find_by_id(self.emergency_requests, order_id)
+            if order is None:
+                return {"ok": False, "error": f"Emergency request #{order_id} not found"}
+            valid_statuses = ["created"]
+            event_kind = "uc1"
+            event_message = f"Emergency request #{order_id} dispatched"
+        elif process_type == PROCESS_ROUTINE:
+            order = self._find_by_id(self.delivery_requests, order_id)
+            if order is None:
+                return {"ok": False, "error": f"Routine delivery #{order_id} not found"}
+            valid_statuses = ["queued", "approved"]
+            event_kind = "uc2"
+            event_message = f"Routine delivery #{order_id} dispatched"
+        else:
+            return {"ok": False, "error": "Unknown process type"}
+
+        if order["status"] not in valid_statuses:
+            return {"ok": False, "error": f"Order #{order_id} is {order['status']} and cannot be dispatched"}
+
+        restricted_zone = self._is_restricted_destination(order["target"])
+        order["restricted_zone"] = restricted_zone
+
+        mission = {
+            "process_type": process_type,
+            "order_id": order["id"],
+            "restricted_zone": restricted_zone,
+        }
+        result = self.send_command("dispatch", target=order["target"], mission=mission)
         if result["ok"]:
-            delivery["status"] = "dispatched"
-            self.add_event("uc2", f"Routine delivery #{delivery_id} dispatched")
-        return result | {"delivery": delivery}
+            order["status"] = "dispatched"
+            self.active_mission = {
+                **mission,
+                "target": order["target"],
+                "phase": "navigating",
+                "label": self._mission_label(process_type, order),
+                "started_at": datetime.now().strftime("%H:%M:%S"),
+            }
+            zone_note = "restricted destination" if restricted_zone else "standard destination"
+            self.add_event("order_dispatched", f"{event_message} ({zone_note})")
+            self.add_event(event_kind, event_message)
+            self.publish_all()
+
+        return result | {"order": order, "active_mission": self.active_mission}
+
+    def solve_restricted_delivery(self, decision):
+        mission = self.active_mission
+        if not mission or mission.get("process_type") != PROCESS_ROUTINE:
+            return {"ok": False, "error": "No routine restricted delivery is waiting for resolution"}
+        if mission.get("phase") != "restricted_alert":
+            return {"ok": False, "error": "The active routine delivery is not in restricted alert"}
+
+        delivery = self._find_by_id(self.delivery_requests, mission.get("order_id"))
+        if delivery is None:
+            return {"ok": False, "error": "Active routine delivery not found"}
+
+        if decision == "abort":
+            result = self.send_command("manual_abort")
+            if result["ok"]:
+                delivery["status"] = "aborted_restricted"
+                mission["phase"] = "returning"
+                self.add_event("manual_resolution_aborted", "Restricted zone alert aborted. Drone is returning to base.")
+                self.publish_all()
+            return result | {"delivery": delivery, "active_mission": mission}
+
+        if decision != "complete":
+            return {"ok": False, "error": "Decision must be complete or abort"}
+
+        result = self.send_command("manual_complete")
+        if not result["ok"]:
+            return result | {"delivery": delivery, "active_mission": mission}
+
+        delivery["status"] = "dropping"
+        mission["phase"] = "dropping_medicine"
+        self.add_event("manual_resolution_completed", "Restricted zone alert completed by operator.")
+        self.add_event(
+            "dropping_medicine",
+            "Dropping medicine package. Drone will return to base in 5 seconds.",
+            popup=True,
+            title="Dropping medicine",
+            duration_ms=int(ROUTINE_DROPOFF_SECONDS * 1000),
+        )
+        self._schedule_routine_dropoff_completion(command="mission_complete")
+        self.publish_all()
+        return result | {"delivery": delivery, "active_mission": mission}
 
     def _maybe_trigger_proximity(self, status):
         if self.proximity_sent or status.get("state") != "navigating":
@@ -322,19 +443,65 @@ class MqttServer:
             return
 
         self.proximity_sent = True
+        restricted_destination = self._is_restricted_destination(target)
+        mission = self.active_mission or {
+            "process_type": PROCESS_EMERGENCY,
+            "order_id": None,
+            "target": target,
+            "phase": "navigating",
+            "label": "Direct drone mission",
+        }
+        mission["restricted_zone"] = bool(mission.get("restricted_zone")) or restricted_destination
+        mission["target"] = mission.get("target") or target
+
+        if mission.get("restricted_zone"):
+            self.add_event(
+                "restricted_zone_detected",
+                "Restricted zone detected at the final delivery destination.",
+                popup=True,
+                title="Restricted zone",
+                duration_ms=5000,
+            )
+
+        if mission.get("process_type") == PROCESS_ROUTINE and not mission.get("restricted_zone"):
+            mission["phase"] = "delivering_medicine"
+            self._set_active_order_status("delivering")
+            self.add_event(
+                "routine_delivery_started",
+                "Delivering medicine package. Drone will return to base in 5 seconds.",
+                popup=True,
+                title="Delivering medicine",
+                duration_ms=int(ROUTINE_DROPOFF_SECONDS * 1000),
+            )
+            self._schedule_routine_dropoff_completion(command="dropoff_complete")
+            self.publish_all()
+            return
+
         result = self.send_command("prox_alert")
         if not result["ok"]:
             self.add_event("warning", f"Could not trigger proximity alert: {result['error']}")
             return
 
-        self.add_event(
-            "manual_guidance_required",
-            "Drone reached 95% of the route. Mission server is completing final guidance.",
-            popup=True,
-            title="Final approach reached",
-            duration_ms=int(MANUAL_DECISION_DELAY_SECONDS * 1000),
-        )
-        self._schedule_manual_decision()
+        if mission.get("process_type") == PROCESS_ROUTINE:
+            mission["phase"] = "restricted_alert"
+            self._set_active_order_status("restricted_alert")
+            self.add_event(
+                "manual_resolution_required",
+                "Routine medicine delivery needs operator resolution before returning.",
+            )
+        else:
+            mission["phase"] = "manual_guidance"
+            if not mission.get("restricted_zone"):
+                self.add_event(
+                    "manual_guidance_required",
+                    "Drone reached final approach. Awaiting operator decision.",
+                    popup=True,
+                    title="Final approach reached",
+                    duration_ms=int(MANUAL_DECISION_DELAY_SECONDS * 1000),
+                )
+
+        self.active_mission = mission
+        self.publish_all()
 
     def _schedule_manual_decision(self):
         self._cancel_manual_decision_timer()
@@ -350,6 +517,21 @@ class MqttServer:
             self.manual_decision_timer.cancel()
             self.manual_decision_timer = None
 
+    def _schedule_routine_dropoff_completion(self, command):
+        self._cancel_routine_dropoff_timer()
+        self.routine_dropoff_timer = threading.Timer(
+            ROUTINE_DROPOFF_SECONDS,
+            self._complete_routine_dropoff,
+            kwargs={"command": command},
+        )
+        self.routine_dropoff_timer.daemon = True
+        self.routine_dropoff_timer.start()
+
+    def _cancel_routine_dropoff_timer(self):
+        if self.routine_dropoff_timer is not None:
+            self.routine_dropoff_timer.cancel()
+            self.routine_dropoff_timer = None
+
     def _auto_complete_manual_guidance(self):
         if self.get_status().get("state") != "manual_control":
             return
@@ -357,6 +539,31 @@ class MqttServer:
         result = self.send_command("manual_complete")
         if result["ok"]:
             self.add_event("auto_decision", "Manual guidance completed automatically by mission server")
+
+    def _complete_routine_dropoff(self, command):
+        result = self.send_command(command)
+        if result["ok"]:
+            self._set_active_order_status("returning")
+            if self.active_mission:
+                self.active_mission["phase"] = "returning"
+            self.add_event("routine_delivery_completed", "Medicine delivery completed. Drone is returning to base.")
+            self.publish_all()
+
+    def _handle_state_change(self, state):
+        if not self.active_mission:
+            return
+
+        if state == "returning":
+            self.active_mission["phase"] = "returning"
+            self._set_active_order_status("returning")
+            self.add_event("returning_to_base", "Drone is returning to base.")
+
+        if state == "docked" and self.last_state == "returning":
+            self._set_active_order_status("completed")
+            self.active_mission["phase"] = "completed"
+            self.add_event("mission_completed", "Mission completed and drone docked at base.")
+            self.active_mission = None
+            self.proximity_sent = False
 
     def get_usecases(self):
         return {
@@ -375,6 +582,8 @@ class MqttServer:
                 [],
             )
             status["server_online"] = True
+            status["active_mission"] = dict(self.active_mission) if self.active_mission else None
+            status["restricted_zones"] = RESTRICTED_ZONES
             return status
 
     def status_age(self):
@@ -439,6 +648,54 @@ class MqttServer:
         except (TypeError, ValueError):
             return None
         return {"lat": lat, "lon": lon}
+
+    def _validate_destination(self, target):
+        distance_to_base = self._distance_m(BASE_POSITION, target)
+        if distance_to_base is not None and distance_to_base < BASE_DESTINATION_MIN_DISTANCE_M:
+            return {
+                "ok": False,
+                "error": "Delivery destination cannot be the same as the base station.",
+            }
+        return {"ok": True}
+
+    def _is_restricted_destination(self, target):
+        for zone in RESTRICTED_ZONES:
+            distance = self._distance_m(target, zone)
+            if distance is not None and distance <= RESTRICTED_ZONE_RADIUS_M:
+                return True
+        return False
+
+    def _distance_to_base_from_status(self, status):
+        telemetry = status.get("telemetry") or {}
+        telemetry_distance = telemetry.get("distance_to_base_m")
+        try:
+            if telemetry_distance is not None:
+                return float(telemetry_distance)
+        except (TypeError, ValueError):
+            pass
+
+        pos = self._normalize_coord(status.get("pos"))
+        if not pos:
+            return None
+        return self._distance_m(pos, BASE_POSITION)
+
+    def _set_active_order_status(self, status):
+        if not self.active_mission:
+            return
+
+        records = (
+            self.emergency_requests
+            if self.active_mission.get("process_type") == PROCESS_EMERGENCY
+            else self.delivery_requests
+        )
+        order = self._find_by_id(records, self.active_mission.get("order_id"))
+        if order is not None:
+            order["status"] = status
+
+    def _mission_label(self, process_type, order):
+        if process_type == PROCESS_EMERGENCY:
+            return f"Emergency #{order['id']} · {order.get('requester', 'Unknown requester')}"
+        return f"Routine #{order['id']} · {order.get('requester', 'Unknown requester')} · {order.get('medicine', 'medicine')}"
 
     def _parse_medicines(self, value):
         if isinstance(value, list):
@@ -539,6 +796,7 @@ class MqttServer:
             pass
         finally:
             self._cancel_manual_decision_timer()
+            self._cancel_routine_dropoff_timer()
             self.publish_offline()
             self.client.loop_stop()
             self.client.disconnect()

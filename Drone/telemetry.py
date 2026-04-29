@@ -81,7 +81,7 @@ class TelemetrySimulator:
             self._drain_battery(0.05 * elapsed_seconds)
 
         elif state == "docked":
-            self.logic.battery = min(100, self.logic.battery + 0.15 * elapsed_seconds)
+            self.logic.battery = min(100, self.logic.battery + 1 * elapsed_seconds)
 
         telemetry = {
             "speed_mps": self.speed_mps if state in ["navigating", "returning"] else 0,

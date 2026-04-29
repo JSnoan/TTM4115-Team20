@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedFly Operations</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=server-bridge-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=mission-types-6">
 </head>
 <body data-state="unknown">
   <div class="med-app">
@@ -246,8 +246,6 @@
 
               <div class="action-row">
                 <button id="create-emergency" class="btn primary">Create Emergency Request</button>
-                <select id="emergency-select"></select>
-                <button id="dispatch-emergency" class="btn danger">Dispatch Selected</button>
               </div>
             </section>
 
@@ -372,9 +370,6 @@
               </div>
               <div class="action-row">
                 <button id="create-delivery" class="btn primary">Queue Delivery</button>
-                <select id="delivery-select"></select>
-                <button id="approve-delivery" class="btn secondary">Approve</button>
-                <button id="dispatch-delivery" class="btn primary">Dispatch</button>
               </div>
               <div class="record-list delivery-list" id="delivery-list"></div>
             </section>
@@ -412,6 +407,15 @@
                   <strong id="tracking-popup-message">Drone reached 99% of the route.</strong>
                   <small>Mission server is handling the final approach.</small>
                 </div>
+                <div class="restricted-map-alert" id="restricted-map-alert" hidden>
+                  <span>Restricted zone</span>
+                  <strong>Solve Alert</strong>
+                  <small>Routine medicine delivery cannot return automatically from this destination.</small>
+                  <div>
+                    <button id="solve-alert-complete" class="btn danger">Complete Delivery</button>
+                    <button id="solve-alert-abort" class="btn secondary">Abort Delivery</button>
+                  </div>
+                </div>
               </div>
               <div class="tracking-map-stats">
                 <article><span>Base</span><strong id="tracking-map-origin">-</strong></article>
@@ -436,26 +440,37 @@
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Mission actions</p>
-                  <h2>MQTT Commands</h2>
+                  <h2>Selected Order Control</h2>
                 </div>
               </div>
-              <div class="form-grid">
+              <div class="mission-order-box">
+                <label>Mission order
+                  <select id="mission-order-select"></select>
+                </label>
+                <p id="mission-order-detail">Create an emergency or routine medicine order first.</p>
+                <div class="process-flow-card" id="process-flow-card" data-process="none">
+                  <span>No mission selected</span>
+                  <strong>Create or select an order</strong>
+                  <small>The available controls will adapt to the selected process.</small>
+                </div>
+              </div>
+              <div class="form-grid target-grid">
                 <label>Target latitude
-                  <input id="target-lat" type="number" step="0.000001" value="63.425">
+                  <input id="target-lat" type="number" step="0.000001" value="63.425" readonly>
                 </label>
                 <label>Target longitude
-                  <input id="target-lon" type="number" step="0.000001" value="10.395">
+                  <input id="target-lon" type="number" step="0.000001" value="10.395" readonly>
                 </label>
               </div>
               <div class="command-grid">
-                <button data-command="dispatch" class="btn primary">Dispatch Drone</button>
-                <button data-command="prox_alert" class="btn secondary">Proximity Alert</button>
+                <button id="dispatch-selected-order" class="btn primary">Dispatch Selected Order</button>
                 <button data-command="manual_complete" class="btn secondary">Complete Manual Guidance</button>
                 <button data-command="mission_complete" class="btn secondary">Mission Complete</button>
                 <button data-command="successfully_docked" class="btn secondary">Confirm Docked</button>
                 <button data-command="nav_abort" class="btn danger">Abort Navigation</button>
                 <button data-command="manual_abort" class="btn danger">Abort Manual Guidance</button>
               </div>
+              <p class="mission-action-hint" id="mission-action-hint">Select an order to see the next available action.</p>
             </section>
 
             <section class="panel">
@@ -527,6 +542,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=server-bridge-1"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=mission-types-6"></script>
 </body>
 </html>

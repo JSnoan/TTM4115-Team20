@@ -8,6 +8,7 @@ class DroneLogic:
         self.base_pos = [63.42, 10.39]
         self.pos = list(self.base_pos)
         self.target = None
+        self.mission = None
         self.battery = 85
         self.current_state = "docked"
 
@@ -40,6 +41,12 @@ class DroneLogic:
             "source": "navigating",
             "target": "returning",
             "trigger": "nav_abort"
+        }
+
+        dropoff_complete = {
+            "source": "navigating",
+            "target": "returning",
+            "trigger": "dropoff_complete"
         }
 
         manual_abort = {
@@ -96,6 +103,7 @@ class DroneLogic:
                 prox_alert,
                 manual_complete,
                 nav_abort,
+                dropoff_complete,
                 manual_abort,
                 mission_complete,
                 successfully_docked
@@ -150,6 +158,7 @@ class DroneLogic:
             "pos": self.pos,
             "battery": round(self.battery, 1),
             "target": self.target,
+            "mission": self.mission,
         }
 
         if extra_data:
