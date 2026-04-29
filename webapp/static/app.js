@@ -1,6 +1,8 @@
 const BASE_POSITION = { lat: 63.42, lon: 10.39 };
 const TRONDHEIM_CENTER = { lat: 63.4305, lon: 10.3951 };
 const MIN_DISPATCH_BATTERY = 90;
+const PROCESS_EMERGENCY = "emergency_first_aid";
+const PROCESS_ROUTINE = "routine_medicine";
 const TRONDHEIM_BOUNDS = {
   minLat: 63.395,
   maxLat: 63.455,
@@ -79,6 +81,9 @@ const elements = {
   trackingMapPopup: document.querySelector("#tracking-map-popup"),
   trackingPopupTitle: document.querySelector("#tracking-popup-title"),
   trackingPopupMessage: document.querySelector("#tracking-popup-message"),
+  restrictedMapAlert: document.querySelector("#restricted-map-alert"),
+  solveAlertComplete: document.querySelector("#solve-alert-complete"),
+  solveAlertAbort: document.querySelector("#solve-alert-abort"),
   trackingMapOrigin: document.querySelector("#tracking-map-origin"),
   trackingMapDrone: document.querySelector("#tracking-map-drone"),
   trackingMapTarget: document.querySelector("#tracking-map-target"),
@@ -122,6 +127,9 @@ const elements = {
   createDelivery: document.querySelector("#create-delivery"),
   approveDelivery: document.querySelector("#approve-delivery"),
   dispatchDelivery: document.querySelector("#dispatch-delivery"),
+  missionOrderSelect: document.querySelector("#mission-order-select"),
+  missionOrderDetail: document.querySelector("#mission-order-detail"),
+  dispatchSelectedOrder: document.querySelector("#dispatch-selected-order"),
 };
 
 const commandButtons = [...document.querySelectorAll("[data-command]")];
@@ -188,6 +196,12 @@ function distanceMeters(a, b) {
   const haversine = Math.sin(deltaLat / 2) ** 2
     + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) ** 2;
   return 2 * earthRadius * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function assertNotBaseDestination(coord) {
+  if (coord && distanceMeters(BASE_POSITION, coord) < 10) {
+    throw new Error("Delivery destination cannot be the same as the base station");
+  }
 }
 
 function setMapMode(mode) {
@@ -481,6 +495,7 @@ function showTrackingMapPopup(event) {
     event.message || "Drone reached 99% of the route. Final guidance has started.",
   );
 
+  elements.trackingMapPopup.dataset.kind = event.kind || "info";
   elements.trackingMapPopup.classList.add("active");
   window.clearTimeout(showTrackingMapPopup.timeout);
   showTrackingMapPopup.timeout = window.setTimeout(() => {
@@ -506,6 +521,14 @@ function handlePopupEvents(events) {
 }
 
 function activeMissionLabel() {
+  const mission = latestStatus.active_mission || latestStatus.mission;
+  if (mission) {
+    return {
+      title: mission.label || "Active drone mission",
+      subtitle: `${processLabel(mission.process_type)} · ${mission.phase || "active"}`,
+    };
+  }
+
   const emergencies = latestUseCases.emergency_requests || [];
   const deliveries = latestUseCases.delivery_requests || [];
   const activeEmergency = emergencies.slice().reverse().find((request) => request.status === "dispatched");
@@ -533,6 +556,136 @@ function activeMissionLabel() {
     title: "Medical drone mission",
     subtitle: "No order dispatched yet",
   };
+}
+
+function processLabel(processType) {
+  if (processType === PROCESS_EMERGENCY) return "Emergency First Aid";
+  if (processType === PROCESS_ROUTINE) return "Routine Medicine";
+  return "Mission";
+}
+
+function orderStatusAllowsDispatch(status) {
+  return ["created", "queued", "approved"].includes(status);
+}
+
+function missionOrders() {
+  const emergencyOrders = (latestUseCases.emergency_requests || []).map((order) => ({
+    ...order,
+    process_type: PROCESS_EMERGENCY,
+    option_id: `${PROCESS_EMERGENCY}:${order.id}`,
+    label: `Emergency #${order.id} · ${order.requester} · ${order.status}`,
+  }));
+  const routineOrders = (latestUseCases.delivery_requests || []).map((order) => ({
+    ...order,
+    process_type: PROCESS_ROUTINE,
+    option_id: `${PROCESS_ROUTINE}:${order.id}`,
+    label: `Routine #${order.id} · ${order.requester} · ${order.medicine} · ${order.status}`,
+  }));
+  return [...emergencyOrders, ...routineOrders];
+}
+
+function selectedMissionOrder() {
+  const selected = elements.missionOrderSelect?.value;
+  const orders = missionOrders();
+  const activeMission = latestStatus.active_mission || latestStatus.mission;
+  const activeOrder = orders.find(
+    (order) => order.process_type === activeMission?.process_type
+      && Number(order.id) === Number(activeMission?.order_id),
+  );
+  if (activeOrder) return activeOrder;
+  return orders.find((order) => order.option_id === selected) || orders.find((order) => orderStatusAllowsDispatch(order.status)) || orders[0] || null;
+}
+
+function updateSelectedMissionTarget(order = selectedMissionOrder()) {
+  const target = normalizeCoord(order?.target);
+  if (!target) return;
+  if (elements.targetLat) elements.targetLat.value = target.lat.toFixed(6);
+  if (elements.targetLon) elements.targetLon.value = target.lon.toFixed(6);
+  updateTrackingMap({ ...latestStatus, target });
+}
+
+function renderMissionOrderSelect() {
+  if (!elements.missionOrderSelect) return;
+
+  const orders = missionOrders();
+  const previousValue = elements.missionOrderSelect.value;
+  elements.missionOrderSelect.innerHTML = "";
+
+  if (!orders.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No orders available";
+    elements.missionOrderSelect.appendChild(option);
+    setText(elements.missionOrderDetail, "Create an emergency or routine medicine order first.");
+    return;
+  }
+
+  for (const order of orders) {
+    const option = document.createElement("option");
+    option.value = order.option_id;
+    option.textContent = order.label;
+    elements.missionOrderSelect.appendChild(option);
+  }
+
+  const activeMission = latestStatus.active_mission || latestStatus.mission;
+  const activeOrder = orders.find(
+    (order) => order.process_type === activeMission?.process_type
+      && Number(order.id) === Number(activeMission?.order_id),
+  );
+
+  if (activeOrder) {
+    elements.missionOrderSelect.value = activeOrder.option_id;
+  } else if ([...elements.missionOrderSelect.options].some((option) => option.value === previousValue)) {
+    elements.missionOrderSelect.value = previousValue;
+  } else {
+    const preferred = orders.find((order) => orderStatusAllowsDispatch(order.status)) || orders[0];
+    elements.missionOrderSelect.value = preferred.option_id;
+  }
+
+  const order = selectedMissionOrder();
+  const restricted = order?.restricted_zone ? " · restricted destination" : "";
+  setText(
+    elements.missionOrderDetail,
+    order
+      ? `${processLabel(order.process_type)} · ${formatCoordPair(order.target)} · ${order.status}${restricted}`
+      : "Create an emergency or routine medicine order first.",
+  );
+  updateSelectedMissionTarget(order);
+}
+
+function renderMissionControls(status) {
+  const order = selectedMissionOrder();
+  const activeMission = status.active_mission || status.mission || null;
+  const state = status.state || "unknown";
+  const batteryValue = status.battery === null || status.battery === undefined ? null : Number(status.battery);
+  const canDispatch = Boolean(order)
+    && orderStatusAllowsDispatch(order.status)
+    && state === "docked"
+    && (batteryValue === null || batteryValue >= MIN_DISPATCH_BATTERY);
+
+  if (elements.dispatchSelectedOrder) {
+    elements.dispatchSelectedOrder.disabled = !canDispatch;
+    elements.dispatchSelectedOrder.textContent = order
+      ? `Dispatch ${processLabel(order.process_type)}`
+      : "Dispatch Selected Order";
+  }
+
+  const routineActive = activeMission?.process_type === PROCESS_ROUTINE;
+  const restrictedRoutineAlert = routineActive
+    && activeMission?.phase === "restricted_alert"
+    && state === "manual_control";
+
+  if (elements.restrictedMapAlert) {
+    elements.restrictedMapAlert.hidden = !restrictedRoutineAlert;
+  }
+
+  const manualCompleteButton = document.querySelector("[data-command='manual_complete']");
+  const manualAbortButton = document.querySelector("[data-command='manual_abort']");
+  const missionCompleteButton = document.querySelector("[data-command='mission_complete']");
+
+  if (manualCompleteButton) manualCompleteButton.hidden = routineActive;
+  if (manualAbortButton) manualAbortButton.hidden = routineActive;
+  if (missionCompleteButton) missionCompleteButton.hidden = routineActive && activeMission?.phase !== "manual_guidance";
 }
 
 function routeProgress(status) {
@@ -635,6 +788,7 @@ function renderStatus(status) {
 
   updateJourney(status);
   updateCommunication(status);
+  renderMissionControls(status);
 }
 
 function renderRecord(container, records, emptyText, template) {
@@ -741,6 +895,7 @@ function renderUseCases(data) {
     (delivery) => `#${delivery.id} ${delivery.requester} · ${delivery.medicine} · ${delivery.status}`,
     "No deliveries",
   );
+  renderMissionOrderSelect();
 
   renderRecord(
     elements.emergencyList,
@@ -754,6 +909,7 @@ function renderUseCases(data) {
       <p>${escapeHtml(request.need)} · ${escapeHtml(request.priority || "urgent")}</p>
       <small>Base: ${formatCoordPair(request.origin)}</small>
       <small>Destination: ${formatCoordPair(request.target)}</small>
+      <small>${request.restricted_zone ? "Restricted destination" : "Standard destination"}</small>
       <small>${escapeHtml(request.notes || "No notes")}</small>
     `,
   );
@@ -770,6 +926,7 @@ function renderUseCases(data) {
       <p>${escapeHtml(registration.address)}</p>
       <small>Approved: ${escapeHtml((registration.approved_medicines || []).join(", ") || "none")}</small>
       <small>Drop-off: ${formatCoordPair(registration.dropoff)}</small>
+      <small>${registration.restricted_zone ? "Restricted destination" : "Standard destination"}</small>
     `,
   );
 
@@ -784,6 +941,7 @@ function renderUseCases(data) {
       </div>
       <p>${escapeHtml(delivery.medicine)} · ${escapeHtml(delivery.priority || "standard")}</p>
       <small>Destination: ${formatCoordPair(delivery.target)}</small>
+      <small>${delivery.restricted_zone ? "Restricted destination" : "Standard destination"}</small>
     `,
   );
 
@@ -912,8 +1070,23 @@ document.querySelectorAll("[data-map-mode]").forEach((button) => {
   input?.addEventListener("input", () => updateTrackingMap(latestStatus));
 });
 
+elements.missionOrderSelect?.addEventListener("change", () => {
+  const order = selectedMissionOrder();
+  const restricted = order?.restricted_zone ? " · restricted destination" : "";
+  setText(
+    elements.missionOrderDetail,
+    order
+      ? `${processLabel(order.process_type)} · ${formatCoordPair(order.target)} · ${order.status}${restricted}`
+      : "Create an emergency or routine medicine order first.",
+  );
+  updateSelectedMissionTarget(order);
+  renderMissionControls(latestStatus);
+});
+
 elements.createEmergency?.addEventListener("click", () => {
   runUseCaseAction(async () => {
+    const destination = readCoord(elements.emergencyLat, elements.emergencyLon);
+    assertNotBaseDestination(destination);
     const result = await postJson("/api/emergency", {
       requester: elements.emergencyRequester.value,
       contact: elements.emergencyContact.value,
@@ -940,6 +1113,8 @@ elements.dispatchEmergency?.addEventListener("click", () => {
 
 elements.registerRequester?.addEventListener("click", () => {
   runUseCaseAction(async () => {
+    const dropoff = readCoord(elements.registrationLat, elements.registrationLon);
+    assertNotBaseDestination(dropoff);
     const result = await postJson("/api/register", {
       requester: elements.registrationRequester.value,
       contact: elements.registrationContact.value,
@@ -985,6 +1160,32 @@ elements.dispatchDelivery?.addEventListener("click", () => {
     if (!id) throw new Error("Select a delivery first");
     await postJson(`/api/delivery/${id}/dispatch`);
     return { message: `Dispatched delivery #${id}` };
+  }, { screen: "tracking" });
+});
+
+elements.dispatchSelectedOrder?.addEventListener("click", () => {
+  runUseCaseAction(async () => {
+    const order = selectedMissionOrder();
+    if (!order) throw new Error("Select an order first");
+    await postJson("/api/orders/dispatch", {
+      process_type: order.process_type,
+      order_id: order.id,
+    });
+    return { message: `Dispatched ${processLabel(order.process_type)} #${order.id}` };
+  }, { screen: "tracking" });
+});
+
+elements.solveAlertComplete?.addEventListener("click", () => {
+  runUseCaseAction(async () => {
+    await postJson("/api/restricted/solve", { decision: "complete" });
+    return { message: "Restricted delivery completed" };
+  }, { screen: "tracking" });
+});
+
+elements.solveAlertAbort?.addEventListener("click", () => {
+  runUseCaseAction(async () => {
+    await postJson("/api/restricted/solve", { decision: "abort" });
+    return { message: "Restricted delivery aborted" };
   }, { screen: "tracking" });
 });
 

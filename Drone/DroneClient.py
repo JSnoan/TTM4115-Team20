@@ -68,7 +68,7 @@ class DroneClient:
         
         allowed_commands = {
             "docked": ["dispatch"],
-            "navigating": ["prox_alert", "nav_abort"],
+            "navigating": ["prox_alert", "nav_abort", "dropoff_complete"],
             "manual_control": ["manual_complete", "manual_abort"],
             "waiting_onsite": ["mission_complete"],
             "returning": ["successfully_docked"],
@@ -92,7 +92,10 @@ class DroneClient:
 
         if command == "dispatch":
             self.telemetry.set_target(payload.get("target"))
+            self.logic.mission = payload.get("mission")
             self.proximity_sent = False
+        elif command == "successfully_docked":
+            self.logic.mission = None
 
         self.stm_driver.send(command, "droneMachine")
         print(f'sent command {command} to the state machine')
