@@ -35,12 +35,12 @@ class SenseReader:
         try:
             return {
                 "available": True,
-                "source": "sense_hat",
+                # "source": "sense_hat",
                 "acceleration": self.sense.get_accelerometer_raw(),
-                "orientation": self.sense.get_orientation_degrees(),
-                "temperature": round(self.sense.get_temperature(), 2),
-                "pressure": round(self.sense.get_pressure(), 2),
-                "humidity": round(self.sense.get_humidity(), 2),
+                # "orientation": self.sense.get_orientation_degrees(),
+                # "temperature": round(self.sense.get_temperature(), 2),
+                # "pressure": round(self.sense.get_pressure(), 2),
+                # "humidity": round(self.sense.get_humidity(), 2),
             }
         except Exception as err:
             return {
@@ -55,7 +55,7 @@ class SenseReader:
 
         return {
             "available": False,
-            "source": "mock",
+            # "source": "mock",
             "acceleration": {
                 "x": round(0.02 * wobble, 3),
                 "y": round(0.01 * math.cos(elapsed / 3), 3),
@@ -66,7 +66,7 @@ class SenseReader:
                 "roll": round(1.5 * math.cos(elapsed / 4), 2),
                 "yaw": round((elapsed * 8) % 360, 2),
             },
-            "temperature": round(22.0 + 0.4 * wobble, 2),
-            "pressure": round(1013.0 + 0.8 * wobble, 2),
-            "humidity": round(38.0 + 2.0 * math.cos(elapsed / 5), 2),
+            # "temperature": round(22.0 + 0.4 * wobble, 2),
+            # "pressure": round(1013.0 + 0.8 * wobble, 2),
+            # "humidity": round(38.0 + 2.0 * math.cos(elapsed / 5), 2),
         }
