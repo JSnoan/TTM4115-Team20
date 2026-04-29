@@ -66,7 +66,7 @@ class TelemetrySimulator:
                 self.speed_mps * elapsed_seconds,
             )
             distance_to_target = distance_meters(self.logic.pos, self.target)
-            self._drain_battery(3 * elapsed_seconds) # Change for simulating edge case 3 is a good nr.
+            self._drain_battery(0.5 * elapsed_seconds) # Change for simulating edge case 3 is a good nr.
 
         elif state == "returning":
             self.logic.pos = move_towards(

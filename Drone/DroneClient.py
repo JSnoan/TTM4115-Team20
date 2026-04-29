@@ -21,7 +21,7 @@ class DroneClient:
         broker,
         port,
         drone_id="drone_1",
-        telemetry_interval=1.0,
+        telemetry_interval=5.0,
         auto_proximity=False,
         mock_sense_hat=False,
     ):
