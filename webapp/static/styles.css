@@ -1357,6 +1357,11 @@ input[readonly]:focus {
   display: none;
 }
 
+.command-grid [hidden],
+.command-grid .is-hidden {
+  display: none !important;
+}
+
 .tracking-map-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

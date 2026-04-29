@@ -801,8 +801,12 @@ function renderMissionControls(status) {
   const setCommandVisibility = (button, visible) => {
     if (!button) return false;
     button.hidden = !visible;
+    button.classList.toggle("is-hidden", !visible);
+    button.setAttribute("aria-hidden", visible ? "false" : "true");
     if (visible) {
       button.disabled = !allowed.includes(button.dataset.command);
+    } else {
+      button.disabled = true;
     }
     return visible;
   };

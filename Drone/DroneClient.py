@@ -8,9 +8,10 @@ import stmpy
 from droneLogic import DroneLogic
 from sense_reader import SenseReader
 from sense_hat_display import SenseHatDisplay, mode_for_state
-from telemetry import TelemetrySimulator
+from telemetry import TelemetrySimulator, distance_meters
 
 MIN_DISPATCH_BATTERY = 90
+BASE_DOCKED_RADIUS_M = 5
 DISPLAY_WARNING_SECONDS = 5
 
 class DroneClient:
@@ -89,6 +90,19 @@ class DroneClient:
             })
             self._set_display_warning("battery_too_low_for_dispatch")
             return
+
+        if command == "successfully_docked":
+            distance_to_base = distance_meters(self.logic.pos, self.logic.base_pos)
+            if distance_to_base > BASE_DOCKED_RADIUS_M:
+                print(
+                    "Ignored successfully_docked: drone is "
+                    f"{distance_to_base:.1f} m from base"
+                )
+                self.logic.publish_status({
+                    "warning": "not_at_base_for_docked_confirmation",
+                    "distance_to_base_m": round(distance_to_base, 1),
+                })
+                return
 
         if command == "dispatch":
             self.telemetry.set_target(payload.get("target"))
