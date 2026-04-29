@@ -494,12 +494,11 @@ class MqttServer:
             if not mission.get("restricted_zone"):
                 self.add_event(
                     "manual_guidance_required",
-                    "Drone reached final approach. Mission server is completing guidance.",
+                    "Drone reached final approach. Awaiting operator decision.",
                     popup=True,
                     title="Final approach reached",
                     duration_ms=int(MANUAL_DECISION_DELAY_SECONDS * 1000),
                 )
-            self._schedule_manual_decision()
 
         self.active_mission = mission
         self.publish_all()

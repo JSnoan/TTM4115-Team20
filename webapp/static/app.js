@@ -726,9 +726,11 @@ function renderMissionOrderSelect() {
   );
   const previousOrder = orders.find((order) => order.option_id === previousValue);
   const nextDispatchableOrder = orders.find((order) => orderStatusAllowsDispatch(order.status));
+  const previousIsInFlight = previousOrder?.status === "dispatched";
   const shouldMoveToNextDispatchable = !activeMission
     && latestStatus.state === "docked"
     && nextDispatchableOrder
+    && !previousIsInFlight
     && (!previousOrder || !orderStatusAllowsDispatch(previousOrder.status));
 
   if (activeOrder) {
