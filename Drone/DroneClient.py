@@ -152,7 +152,7 @@ class DroneClient:
             self.logic.publish_status({
                 "telemetry": telemetry_data,
                 "sense_hat": sense_hat_data,
-                "sense_hat_display": display_data,
+                # "sense_hat_display": display_data,
             })
 
             distance_to_target = telemetry_data.get("distance_to_target_m")
