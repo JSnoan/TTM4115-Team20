@@ -234,7 +234,7 @@ def parse_args():
     parser.add_argument(
         "--telemetry-interval",
         type=float,
-        default=float(os.getenv("TELEMETRY_INTERVAL", "1.0")),
+        default=float(os.getenv("TELEMETRY_INTERVAL", "5.0")),
     )
     parser.add_argument(
         "--auto-proximity",
