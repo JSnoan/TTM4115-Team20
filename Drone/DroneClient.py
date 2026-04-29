@@ -12,6 +12,7 @@ from telemetry import TelemetrySimulator
 
 MIN_DISPATCH_BATTERY = 90
 DISPLAY_WARNING_SECONDS = 5
+AUTO_RETURN_BATTERY_THRESHOLD = 25
 
 class DroneClient:
     def __init__(
@@ -29,6 +30,7 @@ class DroneClient:
         self.telemetry_interval = telemetry_interval
         self.auto_proximity = auto_proximity
         self.proximity_sent = False
+        self.low_battery_return_sent = False
         self.display_warning = None
         self.display_warning_until = 0
         self.lock = threading.Lock()
@@ -93,6 +95,7 @@ class DroneClient:
         if command == "dispatch":
             self.telemetry.set_target(payload.get("target"))
             self.proximity_sent = False
+            self.low_battery_return_sent = False
 
         self.stm_driver.send(command, "droneMachine")
         print(f'sent command {command} to the state machine')
@@ -137,6 +140,36 @@ class DroneClient:
 
             distance_to_target = telemetry_data.get("distance_to_target_m")
             distance_to_base = telemetry_data.get("distance_to_base_m")
+
+            if self.logic.current_state == "docked":
+                self.low_battery_return_sent = False
+
+            if (
+                self.logic.current_state in ["navigating", "manual_control", "waiting_onsite"]
+                and self.logic.battery <= AUTO_RETURN_BATTERY_THRESHOLD
+                and not self.low_battery_return_sent
+            ):
+                if self.logic.current_state == "navigating":
+                    self.stm_driver.send("nav_abort", "droneMachine")
+                    print(
+                        "Auto nav_abort sent to the state machine "
+                        f"(battery {self.logic.battery:.1f}% <= {AUTO_RETURN_BATTERY_THRESHOLD}%)"
+                    )
+                elif self.logic.current_state == "manual_control":
+                    self.stm_driver.send("manual_abort", "droneMachine")
+                    print(
+                        "Auto manual_abort sent to the state machine "
+                        f"(battery {self.logic.battery:.1f}% <= {AUTO_RETURN_BATTERY_THRESHOLD}%)"
+                    )
+                else:
+                    self.stm_driver.send("mission_complete", "droneMachine")
+                    print(
+                        "Auto mission_complete sent to the state machine "
+                        f"(battery {self.logic.battery:.1f}% <= {AUTO_RETURN_BATTERY_THRESHOLD}%)"
+                    )
+
+                self.low_battery_return_sent = True
+
             if (
                 self.auto_proximity
                 and self.logic.current_state == "navigating"
