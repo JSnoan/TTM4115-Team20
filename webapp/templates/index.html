@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedFly Operations</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=mission-types-2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=mission-types-5">
 </head>
 <body data-state="unknown">
   <div class="med-app">
@@ -409,7 +409,7 @@
                 </div>
                 <div class="restricted-map-alert" id="restricted-map-alert" hidden>
                   <span>Restricted zone</span>
-                  <strong>Manual resolution required</strong>
+                  <strong>Solve Alert</strong>
                   <small>Routine medicine delivery cannot return automatically from this destination.</small>
                   <div>
                     <button id="solve-alert-complete" class="btn danger">Complete Delivery</button>
@@ -448,6 +448,11 @@
                   <select id="mission-order-select"></select>
                 </label>
                 <p id="mission-order-detail">Create an emergency or routine medicine order first.</p>
+                <div class="process-flow-card" id="process-flow-card" data-process="none">
+                  <span>No mission selected</span>
+                  <strong>Create or select an order</strong>
+                  <small>The available controls will adapt to the selected process.</small>
+                </div>
               </div>
               <div class="form-grid target-grid">
                 <label>Target latitude
@@ -537,6 +542,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=mission-types-2"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=mission-types-5"></script>
 </body>
 </html>

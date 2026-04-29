@@ -25,6 +25,7 @@ PROXIMITY_PROGRESS_THRESHOLD = 0.99
 MANUAL_DECISION_DELAY_SECONDS = 2.0
 ROUTINE_DROPOFF_SECONDS = 5.0
 BASE_DESTINATION_MIN_DISTANCE_M = 10
+BASE_DOCKED_RADIUS_M = 5
 RESTRICTED_ZONE_RADIUS_M = 25
 PROCESS_EMERGENCY = "emergency_first_aid"
 PROCESS_ROUTINE = "routine_medicine"
@@ -177,6 +178,19 @@ class MqttServer:
                 "error": f"Command {command} is not valid while state is {state}",
                 "state": state,
             }
+
+        if command == "successfully_docked":
+            distance_to_base = self._distance_to_base_from_status(status)
+            if distance_to_base is None or distance_to_base > BASE_DOCKED_RADIUS_M:
+                distance_text = "unknown" if distance_to_base is None else f"{distance_to_base:.1f} m"
+                return {
+                    "ok": False,
+                    "error": (
+                        "Drone can only be confirmed docked at the base station. "
+                        f"Current distance to base: {distance_text}."
+                    ),
+                    "state": state,
+                }
 
         battery = status.get("battery")
         if command == "dispatch" and battery is not None and battery < MIN_DISPATCH_BATTERY:
@@ -343,10 +357,13 @@ class MqttServer:
         if order["status"] not in valid_statuses:
             return {"ok": False, "error": f"Order #{order_id} is {order['status']} and cannot be dispatched"}
 
+        restricted_zone = self._is_restricted_destination(order["target"])
+        order["restricted_zone"] = restricted_zone
+
         mission = {
             "process_type": process_type,
             "order_id": order["id"],
-            "restricted_zone": bool(order.get("restricted_zone")),
+            "restricted_zone": restricted_zone,
         }
         result = self.send_command("dispatch", target=order["target"], mission=mission)
         if result["ok"]:
@@ -358,7 +375,8 @@ class MqttServer:
                 "label": self._mission_label(process_type, order),
                 "started_at": datetime.now().strftime("%H:%M:%S"),
             }
-            self.add_event("order_dispatched", event_message)
+            zone_note = "restricted destination" if restricted_zone else "standard destination"
+            self.add_event("order_dispatched", f"{event_message} ({zone_note})")
             self.add_event(event_kind, event_message)
             self.publish_all()
 
@@ -393,6 +411,7 @@ class MqttServer:
 
         delivery["status"] = "dropping"
         mission["phase"] = "dropping_medicine"
+        self.add_event("manual_resolution_completed", "Restricted zone alert completed by operator.")
         self.add_event(
             "dropping_medicine",
             "Dropping medicine package. Drone will return to base in 5 seconds.",
@@ -424,19 +443,21 @@ class MqttServer:
             return
 
         self.proximity_sent = True
+        restricted_destination = self._is_restricted_destination(target)
         mission = self.active_mission or {
             "process_type": PROCESS_EMERGENCY,
             "order_id": None,
-            "restricted_zone": self._is_restricted_destination(target),
             "target": target,
             "phase": "navigating",
             "label": "Direct drone mission",
         }
+        mission["restricted_zone"] = bool(mission.get("restricted_zone")) or restricted_destination
+        mission["target"] = mission.get("target") or target
 
         if mission.get("restricted_zone"):
             self.add_event(
                 "restricted_zone_detected",
-                "Restricted zone detected at the delivery destination.",
+                "Restricted zone detected at the final delivery destination.",
                 popup=True,
                 title="Restricted zone",
                 duration_ms=5000,
@@ -639,10 +660,25 @@ class MqttServer:
         return {"ok": True}
 
     def _is_restricted_destination(self, target):
-        return any(
-            (self._distance_m(target, zone) or 999999) <= RESTRICTED_ZONE_RADIUS_M
-            for zone in RESTRICTED_ZONES
-        )
+        for zone in RESTRICTED_ZONES:
+            distance = self._distance_m(target, zone)
+            if distance is not None and distance <= RESTRICTED_ZONE_RADIUS_M:
+                return True
+        return False
+
+    def _distance_to_base_from_status(self, status):
+        telemetry = status.get("telemetry") or {}
+        telemetry_distance = telemetry.get("distance_to_base_m")
+        try:
+            if telemetry_distance is not None:
+                return float(telemetry_distance)
+        except (TypeError, ValueError):
+            pass
+
+        pos = self._normalize_coord(status.get("pos"))
+        if not pos:
+            return None
+        return self._distance_m(pos, BASE_POSITION)
 
     def _set_active_order_status(self, status):
         if not self.active_mission:

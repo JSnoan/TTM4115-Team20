@@ -156,6 +156,7 @@ class DroneClient:
                 and distance_to_base is not None
                 and distance_to_base <= 1
             ):
+                self.logic.mission = None
                 self.stm_driver.send("successfully_docked", "droneMachine")
                 print("Auto successfully_docked sent to the state machine")
 

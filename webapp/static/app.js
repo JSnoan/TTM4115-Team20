@@ -1,6 +1,7 @@
 const BASE_POSITION = { lat: 63.42, lon: 10.39 };
 const TRONDHEIM_CENTER = { lat: 63.4305, lon: 10.3951 };
 const MIN_DISPATCH_BATTERY = 90;
+const BASE_DOCKED_RADIUS_M = 5;
 const PROCESS_EMERGENCY = "emergency_first_aid";
 const PROCESS_ROUTINE = "routine_medicine";
 const TRONDHEIM_BOUNDS = {
@@ -130,6 +131,7 @@ const elements = {
   dispatchDelivery: document.querySelector("#dispatch-delivery"),
   missionOrderSelect: document.querySelector("#mission-order-select"),
   missionOrderDetail: document.querySelector("#mission-order-detail"),
+  processFlowCard: document.querySelector("#process-flow-card"),
   dispatchSelectedOrder: document.querySelector("#dispatch-selected-order"),
   missionActionHint: document.querySelector("#mission-action-hint"),
 };
@@ -204,6 +206,18 @@ function assertNotBaseDestination(coord) {
   if (coord && distanceMeters(BASE_POSITION, coord) < 10) {
     throw new Error("Delivery destination cannot be the same as the base station");
   }
+}
+
+function distanceToBase(status = latestStatus) {
+  const telemetryDistance = Number(status.telemetry?.distance_to_base_m);
+  if (Number.isFinite(telemetryDistance)) return telemetryDistance;
+  const pos = normalizeCoord(status.pos);
+  return pos ? distanceMeters(pos, BASE_POSITION) : null;
+}
+
+function isDroneAtBase(status = latestStatus) {
+  const distance = distanceToBase(status);
+  return distance !== null && distance <= BASE_DOCKED_RADIUS_M;
 }
 
 function setMapMode(mode) {
@@ -402,7 +416,10 @@ function initTrackingMap() {
 }
 
 function activeMissionFromStatus(status = latestStatus) {
-  return status.active_mission || status.mission || null;
+  if (Object.prototype.hasOwnProperty.call(status, "active_mission")) {
+    return status.active_mission || null;
+  }
+  return status.mission || null;
 }
 
 function trackingTarget(status) {
@@ -570,6 +587,34 @@ function activeMissionLabel() {
   };
 }
 
+function missionAwareStateLabel(state, status = latestStatus) {
+  const mission = activeMissionFromStatus(status);
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "restricted_alert") {
+    return "restricted alert";
+  }
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "delivering_medicine") {
+    return "delivering medicine";
+  }
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "dropping_medicine") {
+    return "dropping medicine";
+  }
+  return (state || "unknown").replaceAll("_", " ");
+}
+
+function missionAwareStateCopy(state, status = latestStatus) {
+  const mission = activeMissionFromStatus(status);
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "restricted_alert") {
+    return "Restricted destination reached. Waiting for operator decision in the Solve Alert panel.";
+  }
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "delivering_medicine") {
+    return "Medicine package is being delivered automatically before the drone returns.";
+  }
+  if (mission?.process_type === PROCESS_ROUTINE && mission?.phase === "dropping_medicine") {
+    return "Medicine package is being dropped after restricted-zone completion.";
+  }
+  return stateCopy[state] || stateCopy.unknown;
+}
+
 function processLabel(processType) {
   if (processType === PROCESS_EMERGENCY) return "Emergency First Aid";
   if (processType === PROCESS_ROUTINE) return "Routine Medicine";
@@ -617,6 +662,39 @@ function updateSelectedMissionTarget(order = selectedMissionOrder()) {
   updateTrackingMap({ ...latestStatus, target });
 }
 
+function renderProcessFlow(order, activeMission = activeMissionFromStatus(latestStatus)) {
+  if (!elements.processFlowCard) return;
+
+  const processType = activeMission?.process_type || order?.process_type || "none";
+  const restricted = Boolean(activeMission?.restricted_zone || order?.restricted_zone);
+  elements.processFlowCard.dataset.process = processType;
+  elements.processFlowCard.dataset.restricted = restricted ? "true" : "false";
+
+  let label = "No mission selected";
+  let title = "Create or select an order";
+  let copy = "The available controls will adapt to the selected process.";
+
+  if (processType === PROCESS_EMERGENCY) {
+    label = restricted ? "Emergency First Aid · Restricted destination" : "Emergency First Aid";
+    title = restricted ? "Restricted destination, emergency flow" : "Manual final approach";
+    copy = restricted
+      ? "A restricted-zone popup appears at arrival, then the emergency manual guidance flow continues."
+      : "At arrival the drone enters manual guidance, then waits onsite until mission completion.";
+  } else if (processType === PROCESS_ROUTINE) {
+    label = restricted ? "Routine Medicine · Restricted destination" : "Routine Medicine";
+    title = restricted ? "Operator resolution required" : "Automatic medicine delivery";
+    copy = restricted
+      ? "At arrival the drone enters manual control and the red Solve Alert panel decides complete or abort."
+      : "At arrival the server shows Delivering medicine for 5 seconds, then sends the drone returning.";
+  }
+
+  elements.processFlowCard.innerHTML = `
+    <span>${escapeHtml(label)}</span>
+    <strong>${escapeHtml(title)}</strong>
+    <small>${escapeHtml(copy)}</small>
+  `;
+}
+
 function renderMissionOrderSelect() {
   if (!elements.missionOrderSelect) return;
 
@@ -646,13 +724,21 @@ function renderMissionOrderSelect() {
     (order) => order.process_type === activeMission?.process_type
       && Number(order.id) === Number(activeMission?.order_id),
   );
+  const previousOrder = orders.find((order) => order.option_id === previousValue);
+  const nextDispatchableOrder = orders.find((order) => orderStatusAllowsDispatch(order.status));
+  const shouldMoveToNextDispatchable = !activeMission
+    && latestStatus.state === "docked"
+    && nextDispatchableOrder
+    && (!previousOrder || !orderStatusAllowsDispatch(previousOrder.status));
 
   if (activeOrder) {
     elements.missionOrderSelect.value = activeOrder.option_id;
+  } else if (shouldMoveToNextDispatchable) {
+    elements.missionOrderSelect.value = nextDispatchableOrder.option_id;
   } else if ([...elements.missionOrderSelect.options].some((option) => option.value === previousValue)) {
     elements.missionOrderSelect.value = previousValue;
   } else {
-    const preferred = orders.find((order) => orderStatusAllowsDispatch(order.status)) || orders[0];
+    const preferred = nextDispatchableOrder || orders[0];
     elements.missionOrderSelect.value = preferred.option_id;
   }
   selectedMissionOptionId = elements.missionOrderSelect.value;
@@ -665,6 +751,7 @@ function renderMissionOrderSelect() {
       ? `${processLabel(order.process_type)} · ${formatCoordPair(order.target)} · ${order.status}${restricted}`
       : "Create an emergency or routine medicine order first.",
   );
+  renderProcessFlow(order);
   updateSelectedMissionTarget(order);
 }
 
@@ -694,6 +781,8 @@ function renderMissionControls(status) {
   const routineActive = activeMission?.process_type === PROCESS_ROUTINE;
   const processType = activeMission?.process_type || order?.process_type || null;
   const phase = activeMission?.phase || "";
+  const atBase = isDroneAtBase(status);
+  const selectedRestricted = Boolean(activeMission?.restricted_zone || order?.restricted_zone);
   const restrictedRoutineAlert = routineActive
     && activeMission?.phase === "restricted_alert"
     && state === "manual_control";
@@ -701,6 +790,7 @@ function renderMissionControls(status) {
   if (elements.restrictedMapAlert) {
     elements.restrictedMapAlert.hidden = !restrictedRoutineAlert;
   }
+  renderProcessFlow(order, activeMission);
 
   const manualCompleteButton = document.querySelector("[data-command='manual_complete']");
   const manualAbortButton = document.querySelector("[data-command='manual_abort']");
@@ -717,6 +807,19 @@ function renderMissionControls(status) {
     return visible;
   };
 
+  const manualFlowItem = document.querySelector("[data-flow-state='manual_control']");
+  if (manualFlowItem) {
+    const strong = manualFlowItem.querySelector("strong");
+    const small = manualFlowItem.querySelector("small");
+    if (processType === PROCESS_ROUTINE && selectedRestricted) {
+      setText(strong, "Restricted Alert");
+      setText(small, "Solve alert");
+    } else {
+      setText(strong, "Manual Control");
+      setText(small, "Dispatcher guidance");
+    }
+  }
+
   const visibleActions = [
     showDispatch,
     setCommandVisibility(navAbortButton, state === "navigating" && phase !== "delivering_medicine"),
@@ -732,7 +835,7 @@ function renderMissionControls(status) {
       missionCompleteButton,
       state === "waiting_onsite" && processType !== PROCESS_ROUTINE,
     ),
-    setCommandVisibility(dockedButton, state === "returning"),
+    setCommandVisibility(dockedButton, state === "returning" && atBase),
   ].filter(Boolean).length;
 
   if (elements.missionActionHint) {
@@ -742,6 +845,10 @@ function renderMissionControls(status) {
         elements.missionActionHint.textContent = "Use the restricted zone alert on the map to resolve this routine delivery.";
       } else if (state === "navigating" && phase === "delivering_medicine") {
         elements.missionActionHint.textContent = "Medicine delivery is being handled automatically by the mission server.";
+      } else if (state === "returning" && !atBase) {
+        const distance = distanceToBase(status);
+        const distanceText = distance === null ? "unknown distance" : `${distance.toFixed(1)} m`;
+        elements.missionActionHint.textContent = `Returning to base. Confirm Docked appears when the drone is at base (${distanceText} away).`;
       } else if (!order) {
         elements.missionActionHint.textContent = "Create an emergency or routine medicine order first.";
       } else {
@@ -800,9 +907,9 @@ function renderStatus(status) {
       ? `MQTT connected · last status ${status.last_status_age_s ?? "waiting"}s ago`
       : "MQTT disconnected",
   );
-  setText(elements.state, state);
+  setText(elements.state, missionAwareStateLabel(state, status));
   if (elements.state) elements.state.dataset.state = state;
-  setText(elements.missionSummary, stateCopy[state] || stateCopy.unknown);
+  setText(elements.missionSummary, missionAwareStateCopy(state, status));
   setText(elements.battery, battery === null ? "-" : `${battery.toFixed(1)}%`);
   setText(elements.trackingBattery, battery === null ? "-" : `${battery.toFixed(1)}%`);
   setText(elements.position, formatCoordPair(status.pos));
@@ -821,8 +928,8 @@ function renderStatus(status) {
         : "Blocked: battery below 90%",
   );
   setText(elements.statusAge, status.last_status_age_s === null ? "-" : `${status.last_status_age_s}s`);
-  setText(elements.trackingState, state.replaceAll("_", " "));
-  setText(elements.trackingSubtitle, stateCopy[state] || stateCopy.unknown);
+  setText(elements.trackingState, missionAwareStateLabel(state, status));
+  setText(elements.trackingSubtitle, missionAwareStateCopy(state, status));
   setText(
     elements.speed,
     telemetry.speed_mps === null || telemetry.speed_mps === undefined
@@ -1143,6 +1250,7 @@ elements.missionOrderSelect?.addEventListener("change", () => {
       ? `${processLabel(order.process_type)} · ${formatCoordPair(order.target)} · ${order.status}${restricted}`
       : "Create an emergency or routine medicine order first.",
   );
+  renderProcessFlow(order);
   updateSelectedMissionTarget(order);
   renderMissionControls(latestStatus);
 });

@@ -1285,6 +1285,59 @@ input[readonly]:focus {
   font-weight: 760;
 }
 
+.process-flow-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(18, 170, 163, 0.12), rgba(255, 255, 255, 0.9));
+  padding: 14px;
+}
+
+.process-flow-card[data-process="emergency_first_aid"] {
+  border-color: rgba(223, 59, 53, 0.32);
+  background: linear-gradient(135deg, rgba(223, 59, 53, 0.12), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card[data-process="routine_medicine"] {
+  border-color: rgba(18, 170, 163, 0.32);
+  background: linear-gradient(135deg, rgba(18, 170, 163, 0.13), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card[data-restricted="true"] {
+  border-color: rgba(240, 160, 32, 0.54);
+  background: linear-gradient(135deg, rgba(240, 160, 32, 0.16), rgba(255, 255, 255, 0.92));
+}
+
+.process-flow-card span {
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.process-flow-card[data-process="emergency_first_aid"] span {
+  color: var(--red);
+}
+
+.process-flow-card[data-restricted="true"] span {
+  color: #a56a00;
+}
+
+.process-flow-card strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.process-flow-card small {
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
 .target-grid input[readonly] {
   color: var(--text);
 }

@@ -285,6 +285,8 @@ if __name__ == "__main__":
     app = create_app(bridge)
 
     try:
+        display_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
+        print(f"Web app running at http://{display_host}:{args.web_port}", flush=True)
         app.run(host=args.host, port=args.web_port, debug=False)
     finally:
         bridge.stop()
