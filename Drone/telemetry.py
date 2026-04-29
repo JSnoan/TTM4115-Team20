@@ -54,28 +54,36 @@ class TelemetrySimulator:
 
         self.logic.target = self.target
 
-    def tick(self, elapsed_seconds):
+    def tick(self, elapsed_seconds, movement_enabled=True, control_mode="automatic"):
         state = self.logic.current_state
         distance_to_target = None
         distance_to_base = None
+        moving = False
+        route_active = state in ["navigating", "returning"]
 
         if state == "navigating" and self.target is not None:
-            self.logic.pos = move_towards(
-                self.logic.pos,
-                self.target,
-                self.speed_mps * elapsed_seconds,
-            )
+            if movement_enabled:
+                self.logic.pos = move_towards(
+                    self.logic.pos,
+                    self.target,
+                    self.speed_mps * elapsed_seconds,
+                )
+                self._drain_battery(0.35 * elapsed_seconds)
+                moving = True
+
             distance_to_target = distance_meters(self.logic.pos, self.target)
-            self._drain_battery(0.35 * elapsed_seconds)
 
         elif state == "returning":
-            self.logic.pos = move_towards(
-                self.logic.pos,
-                self.logic.base_pos,
-                self.speed_mps * elapsed_seconds,
-            )
+            if movement_enabled:
+                self.logic.pos = move_towards(
+                    self.logic.pos,
+                    self.logic.base_pos,
+                    self.speed_mps * elapsed_seconds,
+                )
+                self._drain_battery(0.3 * elapsed_seconds)
+                moving = True
+
             distance_to_base = distance_meters(self.logic.pos, self.logic.base_pos)
-            self._drain_battery(0.3 * elapsed_seconds)
 
         elif state == "waiting_onsite":
             self._drain_battery(0.05 * elapsed_seconds)
@@ -84,9 +92,12 @@ class TelemetrySimulator:
             self.logic.battery = min(100, self.logic.battery + 0.15 * elapsed_seconds)
 
         telemetry = {
-            "speed_mps": self.speed_mps if state in ["navigating", "returning"] else 0,
+            "speed_mps": self.speed_mps if moving else 0,
             "distance_to_target_m": self._round_or_none(distance_to_target),
             "distance_to_base_m": self._round_or_none(distance_to_base),
+            "control_mode": control_mode,
+            "movement_enabled": bool(movement_enabled) if route_active else False,
+            "paused": route_active and not movement_enabled,
         }
 
         return telemetry

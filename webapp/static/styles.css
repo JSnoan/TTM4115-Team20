@@ -1196,6 +1196,64 @@ input[readonly]:focus {
   font-weight: 750;
 }
 
+.joystick-map-status {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1050;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 12px;
+  align-items: center;
+  width: min(390px, calc(100% - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(8, 33, 61, 0.91);
+  box-shadow: 0 18px 36px rgba(8, 33, 61, 0.28);
+  color: white;
+  padding: 14px 16px;
+  backdrop-filter: blur(10px);
+}
+
+.joystick-map-status[hidden] {
+  display: none;
+}
+
+.joystick-map-status > span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 0 6px rgba(240, 160, 32, 0.18);
+}
+
+.joystick-map-status > span.active {
+  background: var(--teal);
+  box-shadow: 0 0 0 6px rgba(18, 170, 164, 0.2);
+}
+
+.joystick-map-status strong,
+.joystick-map-status small {
+  display: block;
+}
+
+.joystick-map-status strong {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.joystick-map-status small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.joystick-map-status.active {
+  background: linear-gradient(135deg, rgba(8, 33, 61, 0.94), rgba(18, 170, 164, 0.9));
+}
+
 .tracking-map-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

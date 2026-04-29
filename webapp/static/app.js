@@ -79,6 +79,10 @@ const elements = {
   trackingMapPopup: document.querySelector("#tracking-map-popup"),
   trackingPopupTitle: document.querySelector("#tracking-popup-title"),
   trackingPopupMessage: document.querySelector("#tracking-popup-message"),
+  joystickMapStatus: document.querySelector("#joystick-map-status"),
+  joystickStatusDot: document.querySelector("#joystick-status-dot"),
+  joystickStatusTitle: document.querySelector("#joystick-status-title"),
+  joystickStatusDetail: document.querySelector("#joystick-status-detail"),
   trackingMapOrigin: document.querySelector("#tracking-map-origin"),
   trackingMapDrone: document.querySelector("#tracking-map-drone"),
   trackingMapTarget: document.querySelector("#tracking-map-target"),
@@ -568,12 +572,42 @@ function updateCommunication(status) {
   elements.chainTelemetry?.classList.toggle("active", Boolean(status.telemetry && Object.keys(status.telemetry).length));
 }
 
+function renderJoystickMapStatus(status) {
+  if (!elements.joystickMapStatus) return;
+
+  const control = status.control || {};
+  const required = Boolean(control.joystick_required);
+  elements.joystickMapStatus.hidden = !required;
+
+  if (!required) return;
+
+  const moving = Boolean(control.movement_enabled && control.joystick_active);
+  const state = status.state || "unknown";
+  const direction = control.joystick_direction ? ` · ${control.joystick_direction}` : "";
+  const destination = state === "returning" ? "base" : "drop-off";
+
+  elements.joystickMapStatus.classList.toggle("active", moving);
+  elements.joystickStatusDot?.classList.toggle("active", moving);
+
+  setText(
+    elements.joystickStatusTitle,
+    moving ? "Joystick input active" : "Waiting for Sense HAT joystick",
+  );
+  setText(
+    elements.joystickStatusDetail,
+    moving
+      ? `Drone moving toward ${destination}${direction}`
+      : "Hold any joystick direction to advance the drone on the map.",
+  );
+}
+
 function renderStatus(status) {
   latestStatus = status;
   const state = status.state || "unknown";
   const telemetry = status.telemetry || {};
   const senseHat = status.sense_hat || {};
   const senseHatDisplay = status.sense_hat_display || {};
+  const control = status.control || {};
   const allowed = status.allowed_commands || [];
   const battery = status.battery === null || status.battery === undefined ? null : Number(status.battery);
 
@@ -606,7 +640,12 @@ function renderStatus(status) {
   );
   setText(elements.statusAge, status.last_status_age_s === null ? "-" : `${status.last_status_age_s}s`);
   setText(elements.trackingState, state.replaceAll("_", " "));
-  setText(elements.trackingSubtitle, stateCopy[state] || stateCopy.unknown);
+  setText(
+    elements.trackingSubtitle,
+    control.joystick_required && !control.movement_enabled
+      ? "Joystick navigation is enabled. Press the Sense HAT joystick to advance."
+      : stateCopy[state] || stateCopy.unknown,
+  );
   setText(
     elements.speed,
     telemetry.speed_mps === null || telemetry.speed_mps === undefined
@@ -635,6 +674,7 @@ function renderStatus(status) {
 
   updateJourney(status);
   updateCommunication(status);
+  renderJoystickMapStatus(status);
 }
 
 function renderRecord(container, records, emptyText, template) {

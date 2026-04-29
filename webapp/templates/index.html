@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MedFly Operations</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=server-bridge-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=joystick-1">
 </head>
 <body data-state="unknown">
   <div class="med-app">
@@ -412,6 +412,13 @@
                   <strong id="tracking-popup-message">Drone reached 99% of the route.</strong>
                   <small>Mission server is handling the final approach.</small>
                 </div>
+                <div class="joystick-map-status" id="joystick-map-status" hidden>
+                  <span id="joystick-status-dot"></span>
+                  <div>
+                    <strong id="joystick-status-title">Joystick navigation</strong>
+                    <small id="joystick-status-detail">Waiting for Sense HAT input.</small>
+                  </div>
+                </div>
               </div>
               <div class="tracking-map-stats">
                 <article><span>Base</span><strong id="tracking-map-origin">-</strong></article>
@@ -449,7 +456,6 @@
               </div>
               <div class="command-grid">
                 <button data-command="dispatch" class="btn primary">Dispatch Drone</button>
-                <button data-command="prox_alert" class="btn secondary">Proximity Alert</button>
                 <button data-command="manual_complete" class="btn secondary">Complete Manual Guidance</button>
                 <button data-command="mission_complete" class="btn secondary">Mission Complete</button>
                 <button data-command="successfully_docked" class="btn secondary">Confirm Docked</button>
@@ -527,6 +533,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=server-bridge-1"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=joystick-1"></script>
 </body>
 </html>

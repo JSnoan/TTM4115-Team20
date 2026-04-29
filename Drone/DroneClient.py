@@ -22,12 +22,15 @@ class DroneClient:
         telemetry_interval=1.0,
         auto_proximity=False,
         mock_sense_hat=False,
+        joystick_navigation=False,
+        mock_joystick_active=False,
     ):
         self.broker = broker
         self.port = port
         self.drone_id = drone_id
         self.telemetry_interval = telemetry_interval
         self.auto_proximity = auto_proximity
+        self.joystick_navigation = joystick_navigation
         self.proximity_sent = False
         self.display_warning = None
         self.display_warning_until = 0
@@ -37,7 +40,10 @@ class DroneClient:
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.logic = DroneLogic(self.client)
-        self.sense_reader = SenseReader()
+        self.sense_reader = SenseReader(
+            use_mock=mock_sense_hat,
+            mock_joystick_active=mock_joystick_active,
+        )
         self.sense_display = SenseHatDisplay(
             use_mock=mock_sense_hat,
             sense=self.sense_reader.sense,
@@ -125,14 +131,20 @@ class DroneClient:
 
     def publish_telemetry(self, elapsed):
         with self.lock:
-            telemetry_data = self.telemetry.tick(elapsed)
             sense_hat_data = self.sense_reader.read()
+            control_data = self._control_status(sense_hat_data)
+            telemetry_data = self.telemetry.tick(
+                elapsed,
+                movement_enabled=control_data["movement_enabled"],
+                control_mode=control_data["mode"],
+            )
             display_data = self._update_sense_display()
 
             self.logic.publish_status({
                 "telemetry": telemetry_data,
                 "sense_hat": sense_hat_data,
                 "sense_hat_display": display_data,
+                "control": control_data,
             })
 
             distance_to_target = telemetry_data.get("distance_to_target_m")
@@ -159,6 +171,31 @@ class DroneClient:
     def _set_display_warning(self, warning):
         self.display_warning = warning
         self.display_warning_until = time.time() + DISPLAY_WARNING_SECONDS
+
+    def _control_status(self, sense_hat_data):
+        state = self.logic.current_state
+        joystick = sense_hat_data.get("joystick", {}) if sense_hat_data else {}
+        joystick_active = bool(joystick.get("active"))
+        joystick_required = self.joystick_navigation and state in ["navigating", "returning"]
+        movement_enabled = (not joystick_required) or joystick_active
+
+        if joystick_required:
+            route_state = "moving" if movement_enabled else "paused_waiting_for_joystick"
+        elif state in ["navigating", "returning"]:
+            route_state = "moving"
+        else:
+            route_state = "idle"
+
+        return {
+            "mode": "joystick_navigation" if self.joystick_navigation else "automatic",
+            "joystick_required": joystick_required,
+            "joystick_active": joystick_active,
+            "joystick_available": bool(joystick.get("available")),
+            "joystick_direction": joystick.get("direction"),
+            "joystick_action": joystick.get("action"),
+            "movement_enabled": movement_enabled,
+            "route_state": route_state,
+        }
 
     def _update_sense_display(self):
         warning = None
@@ -197,6 +234,18 @@ def parse_args():
         default=os.getenv("MOCK_SENSE_HAT", "0") == "1",
         help="Use fake Sense HAT values on Mac/Linux/Windows development machines.",
     )
+    parser.add_argument(
+        "--joystick-navigation",
+        action="store_true",
+        default=os.getenv("JOYSTICK_NAVIGATION", "0") == "1",
+        help="Only move during navigating/returning while the Sense HAT joystick is pressed.",
+    )
+    parser.add_argument(
+        "--mock-joystick-active",
+        action="store_true",
+        default=os.getenv("MOCK_JOYSTICK_ACTIVE", "0") == "1",
+        help="Keep the mock joystick pressed when using --mock-sense-hat.",
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -208,5 +257,7 @@ if __name__ == "__main__":
         telemetry_interval=args.telemetry_interval,
         auto_proximity=args.auto_proximity,
         mock_sense_hat=args.mock_sense_hat,
+        joystick_navigation=args.joystick_navigation,
+        mock_joystick_active=args.mock_joystick_active,
     )
     drone.start()
